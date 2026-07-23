@@ -55,7 +55,7 @@ For local model calls the loop needs Gateway auth (see [docs/01-prerequisites.md
 pnpm dev        # = eve dev: local runtime + interactive terminal UI
 ```
 
-Type a message in the TUI. The orchestrator model (default `google/gemini-2.5-flash-lite`, override with `ORCHESTRATOR_MODEL`) should answer. Tools that need the sandbox or GitHub context will fail-soft locally — that's expected at this phase.
+Type a message in the TUI. The orchestrator model (default `google/gemini-3.1-flash-lite`, override with `ORCHESTRATOR_MODEL`) should answer. Tools that need the sandbox or GitHub context will fail-soft locally — that's expected at this phase.
 
 For scripted verification use the non-interactive mode and the HTTP API:
 

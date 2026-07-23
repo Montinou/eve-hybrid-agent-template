@@ -160,8 +160,8 @@ comment on the same PR creates NO session. **Do not proceed until both hold.**
   system prompt: what a good result looks like, what the posted comment must
   contain, tone/format requirements.
 - Model preferences, or accept defaults: `ORCHESTRATOR_MODEL`
-  (`google/gemini-2.5-flash-lite`) for high-frequency turns, `COMMAND_MODEL`
-  (`anthropic/claude-haiku-4.5`) for command turns.
+  (`google/gemini-3.1-flash-lite`) for high-frequency turns, `COMMAND_MODEL`
+  (`anthropic/claude-sonnet-4.5`) for command turns.
 
 **Files to edit:**
 

@@ -126,8 +126,8 @@ Three facts to internalize:
 
   | Env var | Default | Used for |
   |---|---|---|
-  | `ORCHESTRATOR_MODEL` | `google/gemini-2.5-flash-lite` | high-frequency / fallback turns |
-  | `COMMAND_MODEL` | `anthropic/claude-haiku-4.5` | command turns (mention commands) |
+  | `ORCHESTRATOR_MODEL` | `google/gemini-3.1-flash-lite` | high-frequency / fallback turns |
+  | `COMMAND_MODEL` | `anthropic/claude-sonnet-4.5` | command turns (mention commands) |
   | `DEV_AGENT_MODEL` | Claude Code's default | the nested dev-agent (subscription side — see [docs/05-dev-agent.md](05-dev-agent.md)) |
 
   Rollback of any model migration = unset the env var. Only the compiled fallback

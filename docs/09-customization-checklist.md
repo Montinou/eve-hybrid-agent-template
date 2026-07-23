@@ -30,8 +30,8 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 |---|---|---|
 | `ANTHROPIC_AUTH_TOKEN` | dev-agent | Sensitive. `claude setup-token`; expires ~1 yr, calendar the rotation |
 | `AI_GATEWAY_API_KEY` | eve loop | Omit on Vercel (OIDC); needed for non-Vercel local runs |
-| `ORCHESTRATOR_MODEL` | eve loop | `google/gemini-2.5-flash-lite` |
-| `COMMAND_MODEL` | eve loop | `anthropic/claude-haiku-4.5` |
+| `ORCHESTRATOR_MODEL` | eve loop | `google/gemini-3.1-flash-lite` |
+| `COMMAND_MODEL` | eve loop | `anthropic/claude-sonnet-4.5` |
 | `DEV_AGENT_MODEL` | dev-agent | unset → Claude Code's default |
 | `GITHUB_APP_ID` | channel | BYO GitHub App |
 | `GITHUB_APP_PRIVATE_KEY` | channel | Sensitive; `\n`-escaped PEM is normalized |

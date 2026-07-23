@@ -10,11 +10,11 @@ describe("model.ts", () => {
     // No stubbing here on purpose: this must hold under the real process env
     // (CI doesn't set ORCHESTRATOR_MODEL), proving rollback is just "unset
     // the env var" rather than a code change.
-    expect(orchestratorModelId).toBe("google/gemini-2.5-flash-lite");
+    expect(orchestratorModelId).toBe("google/gemini-3.1-flash-lite");
   });
 
   it("defaults commandModelId when COMMAND_MODEL is unset", () => {
-    expect(commandModelId).toBe("anthropic/claude-haiku-4.5");
+    expect(commandModelId).toBe("anthropic/claude-sonnet-4.5");
   });
 
   it("resolves orchestratorModelId from ORCHESTRATOR_MODEL on a fresh module evaluation", async () => {

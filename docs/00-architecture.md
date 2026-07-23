@@ -38,7 +38,7 @@ The loop generates many small turns; the dev-agent generates a few big runs. The
 
 | Layer | Runs where | Model config | Auth | Bills to |
 |---|---|---|---|---|
-| eve loop turns (routing, orchestration, comment posting) | Vercel function (host) | AI Gateway string (e.g. `anthropic/claude-haiku-4.5`) or an AI SDK `LanguageModel` | Vercel OIDC (automatic on Vercel) or `AI_GATEWAY_API_KEY` | Vercel AI Gateway (or the provider console, for a provider `LanguageModel`) |
+| eve loop turns (routing, orchestration, comment posting) | Vercel function (host) | AI Gateway string (e.g. `anthropic/claude-sonnet-4.5`) or an AI SDK `LanguageModel` | Vercel OIDC (automatic on Vercel) or `AI_GATEWAY_API_KEY` | Vercel AI Gateway (or the provider console, for a provider `LanguageModel`) |
 | Nested dev-agent (Claude Code CLI) | INSIDE the Vercel Sandbox | `createClaudeCode({ model? })` | `ANTHROPIC_AUTH_TOKEN` (subscription OAuth from `claude setup-token`) | Claude subscription + its extra-usage credits |
 | Sandbox compute | Vercel | — | — | Vercel (vCPU-minutes + snapshot storage); unavoidable |
 
