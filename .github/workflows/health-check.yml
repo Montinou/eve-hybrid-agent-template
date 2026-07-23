@@ -1,0 +1,55 @@
+# External health probe (docs/07-ops.md). External BY DESIGN: a dead agent
+# cannot self-report, so this runs from GitHub Actions cron — outside the
+# deployment — and alerts by email via the Resend API directly from the Action.
+#
+# Configure on THIS repo (Settings → Secrets and variables → Actions):
+#   vars.EVE_HEALTH_URL     e.g. https://<deployment>/eve/v1/health
+#   vars.ALERT_EMAIL_FROM   verified Resend sender, e.g. agent-alerts@example.com
+#   vars.ALERT_EMAIL_TO     recipient(s), comma-separated
+#   secrets.RESEND_API_KEY  Resend API key
+# These live in Actions secrets/vars, NOT in the eve deployment env.
+name: Health check
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      # GET /eve/v1/health is always public (skips route auth) per
+      # node_modules/eve/docs — a 200 proves the deployment boots and serves.
+      - name: Ping eve health endpoint (3 attempts, 30s apart)
+        id: ping
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$HEALTH_URL") && \
+              [ "$code" = "200" ] && echo "healthy" && exit 0
+            echo "attempt $i failed (code=${code:-timeout})"; sleep 30
+          done
+          exit 1
+        env:
+          HEALTH_URL: ${{ vars.EVE_HEALTH_URL }}
+      # Until the Resend secret/vars are configured, this step simply fails
+      # alongside the ping — the red workflow run is itself the alert.
+      - name: Alert via Resend
+        if: failure()
+        # Body built with jq --arg so from/to/url values are JSON-escaped — a
+        # literal quote or backslash in a maintainer-entered address can't
+        # break the payload or inject sibling JSON keys.
+        run: |
+          payload=$(jq -n \
+            --arg from "$ALERT_EMAIL_FROM" \
+            --arg to "$ALERT_EMAIL_TO" \
+            --arg url "$HEALTH_URL" \
+            --arg at "$(date -u +%FT%TZ)" \
+            '{from: $from, to: ($to | split(",")), subject: "[eve-hybrid-agent] agent DOWN", text: ("Health check failed 3 consecutive attempts at " + $at + ". URL: " + $url)}')
+          curl -s -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$payload"
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
+          ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO }}
+          HEALTH_URL: ${{ vars.EVE_HEALTH_URL }}

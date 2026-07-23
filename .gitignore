@@ -1,0 +1,21 @@
+# Dependencies
+node_modules
+
+# Environment files — never commit secrets. The example file is the only
+# .env* variant that belongs in the repo.
+.env*
+!.env.example
+
+# eve build/runtime output
+.eve
+.output
+.nitro
+
+# Vercel
+.vercel
+.next
+
+# Misc build artifacts
+dist
+*.tsbuildinfo
+.DS_Store

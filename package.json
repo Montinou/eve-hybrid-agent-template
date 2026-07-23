@@ -1,0 +1,39 @@
+{
+  "name": "eve-hybrid-agent-template",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "imports": {
+    "#*": "./agent/*"
+  },
+  "scripts": {
+    "build": "eve build && node scripts/copy-bridge-assets.mjs",
+    "dev": "eve dev",
+    "start": "eve start",
+    "hash-instructions": "node scripts/hash-instructions.mjs",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-sdk/harness": "^1.0.39",
+    "@ai-sdk/harness-claude-code": "^1.0.40",
+    "@ai-sdk/sandbox-vercel": "^1.0.39",
+    "@vercel/sandbox": "^2.0.1",
+    "ai": "^7.0.26",
+    "eve": "^0.24.6",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.x",
+    "typescript": "^7.0.2",
+    "vitest": "^3.2.4"
+  },
+  "resolutions": {
+    "ai": "^7.0.26"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "packageManager": "pnpm@10.0.0"
+}

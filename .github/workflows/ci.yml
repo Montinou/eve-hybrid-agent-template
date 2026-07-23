@@ -1,0 +1,34 @@
+# CI gate: typecheck + unit tests + generated-artifact drift (docs/07-ops.md).
+#
+# Deliberately NO deploy and NO `eve eval` here: deploys are Vercel's job
+# (push-to-deploy on the linked project), and evals run against a live model —
+# run them on demand (`pnpm exec eve eval`), not on every push.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Reads the pinned pnpm version from package.json's "packageManager".
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      # Commit pnpm-lock.yaml during initial setup (docs/02-scaffold-and-deploy.md);
+      # --frozen-lockfile then guards against lockfile drift in every PR.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      # Drift gate: agent/lib/instructions-hash.ts is generated from
+      # agent/instructions.md (the deployed runtime has no repo filesystem, so
+      # the hash ships precomputed in the bundle). Editing the prompt without
+      # re-running `pnpm hash-instructions` must fail CI.
+      - name: Instructions hash drift gate
+        run: node scripts/hash-instructions.mjs --check
