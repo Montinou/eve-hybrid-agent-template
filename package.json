@@ -16,12 +16,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/harness": "^1.0.39",
-    "@ai-sdk/harness-claude-code": "^1.0.40",
-    "@ai-sdk/sandbox-vercel": "^1.0.39",
-    "@vercel/sandbox": "^2.0.1",
-    "ai": "^7.0.26",
-    "eve": "^0.24.6",
+    "@ai-sdk/harness": "^1.0.43",
+    "@ai-sdk/harness-claude-code": "^1.0.44",
+    "@ai-sdk/sandbox-vercel": "^1.0.43",
+    "@vercel/sandbox": "^2.9.0",
+    "ai": "7.0.0-canary.171",
+    "eve": "^0.27.6",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -30,7 +30,7 @@
     "vitest": "^3.2.4"
   },
   "resolutions": {
-    "ai": "^7.0.26"
+    "ai": "7.0.0-canary.171"
   },
   "engines": {
     "node": "24.x"

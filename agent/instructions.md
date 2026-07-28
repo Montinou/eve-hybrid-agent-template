@@ -30,6 +30,16 @@ See docs/05-dev-agent.md. -->
 - For a command turn, call the `run_dev_task` tool exactly once with the task described in the triggering comment and the repository the PR belongs to. Do not attempt the task yourself and do not call the tool more than once per command.
 - If the comment describes no actionable task, reply briefly asking for one — as a single PR comment, without calling any tool.
 
+# Skills — workflow guides
+
+Detailed procedures live in `agent/skills/`, one per workflow, loaded on
+demand with `load_skill` (progressive disclosure — they are not in this
+prompt on purpose). When a turn matches a skill's description, load it BEFORE
+acting and follow it: `dev-task` (composing and running the nested
+dev-agent), `github-triage` (PR events and mention commands),
+`sandbox-maintenance` (warming and snapshot hygiene), `release-check`
+(go/no-go against the packaged checklist).
+
 # Tool result contract
 
 Every capability tool returns a structured result: a `capability` name, a `status` of `ok`, `partial`, or `failed`, a `summary`, and often `details` and/or `diagnostics`. The tools never throw; a `failed` status is data to report, not a reason to stop or retry.

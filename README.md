@@ -56,8 +56,17 @@ Why this shape works:
 - **`agent/`** — the full eve agent: dynamic per-turn model routing
   (`agent.ts`), a generic orchestrator prompt with a security boundary and
   unattended-operation rules (`instructions.md`), a BYO GitHub App channel with
-  deterministic, unit-tested dispatch (`channels/github.ts`), and the eve
-  channel sandbox (`sandbox.ts`).
+  deterministic, unit-tested dispatch (`channels/github.ts`), the standard eve
+  HTTP channel for chat and API clients (`channels/eve.ts` — terminal UI,
+  `useEveAgent`, curl, SDK; customize its auth before going public), and the
+  eve channel sandbox (`sandbox.ts`).
+- **`agent/skills/`** — one workflow guide per procedure, loaded on demand via
+  `load_skill` (progressive disclosure): `dev-task.md` (composing and running
+  the nested dev-agent), `github-triage.md` (PR events and mention commands),
+  `sandbox-maintenance.md` (warming + snapshot hygiene), and
+  `release-check/` — a PACKAGED skill example (`SKILL.md` +
+  `references/checklist.md`) showing the directory format. Add one skill per
+  workflow your agent owns; keep `instructions.md` short and stable.
 - **`agent/lib/dev-agent.ts`** — the hard-won core: HarnessAgent + Claude Code
   + Vercel Sandbox with template/fork lifecycle, time budgets, structured
   never-throw results, secret delivery via env maps, and snapshot hygiene.
