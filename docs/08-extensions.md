@@ -107,14 +107,21 @@ Two distinct uses, one provider:
 
 ## Other directions that fit the shape
 
-- **More channels:** eve ships channel types beyond GitHub
-  (`node_modules/eve/docs/channels/`) — Slack, email, HTTP. The dispatch-as-pure-
-  functions discipline ([docs/03-github-channel.md](03-github-channel.md)) carries
-  over unchanged.
-- **Agent-readable skills:** drop markdown into `agent/skills/` for per-repo
-  conventions the orchestrator should know (docs: `skills.mdx`). If skills feed
-  the dev-agent prompt, snapshot them at build time and drift-gate the snapshot in
-  CI like the instructions hash.
+- **More channels:** the template already ships TWO — the GitHub App channel and
+  the standard eve HTTP channel (`agent/channels/eve.ts`: chat + API for the
+  terminal UI, `useEveAgent`, curl and the SDK; swap in real auth before going
+  public). eve ships more channel types (`node_modules/eve/docs/channels/`) —
+  Slack, Discord, Telegram, Teams, Linear, Twilio. The dispatch-as-pure-functions
+  discipline ([docs/03-github-channel.md](03-github-channel.md)) carries over
+  unchanged.
+- **Agent-readable skills:** the template ships four in `agent/skills/` — the
+  workflow guides `dev-task`, `github-triage`, `sandbox-maintenance` (flat
+  markdown) and `release-check/` (a PACKAGED skill: `SKILL.md` +
+  `references/checklist.md`). Add one per workflow your agent owns (docs:
+  `skills.mdx`); the description frontmatter is the routing hint the model uses
+  to decide when to `load_skill`. If skills feed the dev-agent prompt, snapshot
+  them at build time and drift-gate the snapshot in CI like the instructions
+  hash.
 - **Subagents and multi-step schedules:** `subagents.mdx` and `schedules.mdx` —
   task-mode runs honor `outputSchema` on `defineAgent`.
 

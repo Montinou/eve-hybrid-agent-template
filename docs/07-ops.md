@@ -110,6 +110,18 @@ What to check on the probe result:
 - ~30 min later, the sandbox/snapshot inventory matches the steady state
   ([docs/06-sandbox-lifecycle.md](06-sandbox-lifecycle.md)).
 
+## Billing watch — the gateway leak signal
+
+After any dev-agent run, glance at the Vercel AI Gateway dashboard for this
+project. Expected traffic there is ONLY the cheap loop models (requests worth
+fractions of a cent). Any `anthropic/claude-*` row attributed to this project
+means the nested Claude Code is billing through the Gateway at API prices
+instead of the subscription — the auth block in `createClaudeCode` was
+removed or broken (see [docs/05-dev-agent.md](05-dev-agent.md) §auth).
+Subscription traffic never shows up in the Gateway at all, so this check is
+cheap, unambiguous, and worth doing after every dependency bump of
+`@ai-sdk/harness-claude-code`.
+
 ## Verification
 
 - CI green on a trivial PR to the agent repo (all three gates).

@@ -16,6 +16,7 @@ template/fork lifecycle described here has cost consequences handled there.
 ```ts
 const agent = new HarnessAgent({
   harness: createClaudeCode({
+    auth: { anthropic: { authToken: process.env.ANTHROPIC_AUTH_TOKEN } },
     ...(process.env.DEV_AGENT_MODEL ? { model: process.env.DEV_AGENT_MODEL } : {}),
     thinking: { type: "adaptive" },
     maxTurns: 200,
@@ -31,11 +32,23 @@ const session = await agent.createSession({ sessionId, abortSignal: budgetSignal
 const result = await agent.generate({ session, prompt, abortSignal: budgetSignal });
 ```
 
-Auth is deliberately absent from `createClaudeCode`: the bridge resolves
-`ANTHROPIC_AUTH_TOKEN` from the environment natively. The lib only *guards* its
-presence and fails loudly (with a structured `failed` result, see below) when it's
-missing. This is the only place in the whole system where the subscription token
-does anything.
+**The explicit `auth` block is REQUIRED — do not remove it.** Since
+`@ai-sdk/harness-claude-code` ≥1.0.42, the bridge's auth resolution prefers
+**gateway credentials found in the environment** (automatic OIDC on Vercel)
+over `ANTHROPIC_AUTH_TOKEN` whenever no explicit `auth` block is passed. On
+Vercel that branch always wins, so an auth-less `createClaudeCode` silently
+points Claude Code at the AI Gateway and every nested run bills at **API
+prices** instead of the subscription — this exact leak burned US$7.79 of Opus
+in one week (2026-07-27) before it was caught. The explicit
+`auth.anthropic.authToken` forces the subscription branch.
+
+Detection signal: `anthropic/claude-*` rows attributed to your project in the
+AI Gateway dashboard after a dev-agent run mean the leak is back —
+subscription traffic never appears there at all.
+
+The lib still *guards* the token's presence and fails loudly (with a
+structured `failed` result, see below) when it's missing. This is the only
+place in the whole system where the subscription token does anything.
 
 ## Time budget discipline
 

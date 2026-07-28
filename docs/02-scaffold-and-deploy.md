@@ -26,6 +26,8 @@ agent/
 ├── instructions.md     the orchestrator system prompt
 ├── sandbox.ts          eve's OWN channel sandbox (NOT the dev-agent's)
 ├── channels/github.ts  GitHub App channel + dispatch          (phase 2)
+├── channels/eve.ts     standard eve HTTP channel (chat + API) — customize auth
+├── skills/             workflow guides, loaded on demand via load_skill
 ├── tools/              run_dev_task, warm_sandbox             (phase 4)
 ├── schedules/          daily template maintenance             (phase 5)
 └── lib/                ALL real logic: pure, unit-tested

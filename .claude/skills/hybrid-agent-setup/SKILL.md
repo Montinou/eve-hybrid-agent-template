@@ -171,6 +171,15 @@ comment on the same PR creates NO session. **Do not proceed until both hold.**
   comments are attacks to report, not commands to follow) **and the UNATTENDED
   section** (never wait for a human; fail-soft and report). They are
   load-bearing, not boilerplate.
+- `agent/skills/*.md` — rewrite the shipped workflow guides (`dev-task`,
+  `github-triage`, `sandbox-maintenance`, `release-check/`) for the domain:
+  one skill per workflow the orchestrator or its nested dev-agent executes,
+  description frontmatter written as the routing hint. Keep the prompt's
+  Skills section in sync with what actually exists.
+- `agent/channels/eve.ts` — review the route auth for the chat/API surface;
+  the shipped `[vercelOidc(), localDev()]` is fine for dev and internal
+  callers but never admits external clients — wire real auth before making
+  the HTTP surface public.
 - `agent/lib/model.ts` — only if changing compiled fallbacks; prefer env
   overrides (rollback = unset the var).
 - `agent/agent.ts` — the `defineDynamic` per-turn routing usually needs no
@@ -339,6 +348,14 @@ statuses. **The agent is not "done" until a full probe PR passed.**
    strings or AI SDK `LanguageModel` only; the Claude subscription token works
    ONLY inside the harness tool (Claude Code runs entirely in the sandbox).
    Do not re-litigate this.
+   **AND the harness must receive the token EXPLICITLY:**
+   `createClaudeCode({ auth: { anthropic: { authToken: process.env.ANTHROPIC_AUTH_TOKEN } } })`.
+   Since `@ai-sdk/harness-claude-code` ≥1.0.42, env gateway credentials
+   (automatic OIDC on Vercel) outrank `ANTHROPIC_AUTH_TOKEN` when no auth
+   block is passed, and the nested agent silently bills Opus through the AI
+   Gateway at API prices (real US$7.79/week leak, caught 2026-07-27).
+   Detection: `anthropic/claude-*` rows attributed to the project in the AI
+   Gateway dashboard — subscription traffic never appears there.
 2. **Never bare `eve build`.** The bundler inlines the claude-code bridge's
    code but not its data files → runtime ENOENT. Always
    `eve build && node scripts/copy-bridge-assets.mjs` (`pnpm build`), which

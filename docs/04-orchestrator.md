@@ -13,9 +13,12 @@ context into `auth.attributes` ([docs/03-github-channel.md](03-github-channel.md
 ## Anatomy of `agent/instructions.md`
 
 The template ships a generic prompt in [`agent/instructions.md`](../agent/instructions.md)
-with `// CUSTOMIZE` markers. Every section below is load-bearing; keep all five when
-you rewrite it for your domain. The reference implementation's prompt (an unattended
-CI QA agent) follows exactly this skeleton.
+with `// CUSTOMIZE` markers. Every section below is load-bearing; keep all six when
+you rewrite it for your domain (the five below plus the short "Skills" section that
+routes to `agent/skills/` via `load_skill` — detailed procedures live THERE, not in
+this prompt; one skill per workflow keeps the always-on prompt small and stable).
+The reference implementation's prompt (an unattended CI QA agent) follows exactly
+this skeleton.
 
 ### 1. Identity
 
@@ -142,8 +145,10 @@ tool.
 ## Customizing this phase
 
 1. Rewrite `agent/instructions.md` at each `// CUSTOMIZE` marker for `{{DOMAIN_TASK}}`,
-   keeping all five sections. Keep the security-boundary and unattended sections
-   near-verbatim.
+   keeping all six sections. Keep the security-boundary and unattended sections
+   near-verbatim. Update the Skills section to list YOUR workflow skills, and
+   rewrite `agent/skills/*.md` to match (one guide per workflow the orchestrator
+   or its nested dev-agent executes).
 2. If you add commands, extend the command→tool table in the prompt AND the dispatch
    attribute values in `agent/lib/dispatch.ts` in the same change.
 3. Pick your two loop models. Cheapest capable model for high-frequency turns;

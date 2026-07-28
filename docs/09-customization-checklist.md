@@ -72,13 +72,21 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 - [ ] Dispatch rules adapted in `agent/lib/dispatch.ts` (pure functions; every
       attribute a tool will need projected into `auth.attributes`)
 - [ ] `agent/channels/github.ts` bot name updated
+- [ ] `agent/channels/eve.ts` auth policy reviewed — the shipped
+      `[vercelOidc(), localDev()]` never admits browser users or external
+      clients; wire real auth (Clerk/Auth.js/API-key/OIDC) BEFORE exposing the
+      chat/API surface publicly
 - [ ] Dispatch unit tests updated and green
 - [ ] **Gate:** a probe comment on an estate-repo PR produces a webhook delivery
       (green in the App's Advanced tab) and an agent turn
 
 ## Phase 3 — Orchestrator brain ([docs/04-orchestrator.md](04-orchestrator.md))
 
-- [ ] `agent/instructions.md` rewritten for your domain — all five sections kept
+- [ ] `agent/instructions.md` rewritten for your domain — all six sections kept
+- [ ] `agent/skills/*.md` rewritten: one workflow guide per procedure your
+      agent owns (start from the shipped `dev-task`, `github-triage`,
+      `sandbox-maintenance`, `release-check/`); descriptions written as
+      routing hints; the prompt's Skills section lists exactly these
       (identity, task contract, security boundary, unattended, output contract)
 - [ ] Command→tool mapping in the prompt matches `dispatch.ts` attributes
 - [ ] Loop models chosen (`ORCHESTRATOR_MODEL` / `COMMAND_MODEL`) or defaults kept

@@ -9,10 +9,13 @@ One durable [eve](https://eve.dev) agent deployed on Vercel splits every request
 ## The diagram
 
 ```
-GitHub webhook ──► eve channel (deterministic dispatch, pure functions)
+GitHub webhook ──► GitHub channel (deterministic dispatch, pure functions)
                      │           agent/channels/github.ts + agent/lib/dispatch.ts
+chat / API ───────► standard eve channel (HTTP: terminal UI, useEveAgent, curl, SDK)
+                     │           agent/channels/eve.ts (customize auth before public)
                      ▼
               eve loop (Vercel Workflow durable session)
+              skills: agent/skills/*  (workflow guides, loaded via load_skill)
               model: AI Gateway string, dynamic PER TURN   (agent/agent.ts)
               ├─ high-frequency turns → tiny model   (ORCHESTRATOR_MODEL)
               └─ command turns        → mid model    (COMMAND_MODEL)
@@ -39,7 +42,7 @@ The loop generates many small turns; the dev-agent generates a few big runs. The
 | Layer | Runs where | Model config | Auth | Bills to |
 |---|---|---|---|---|
 | eve loop turns (routing, orchestration, comment posting) | Vercel function (host) | AI Gateway string (e.g. `anthropic/claude-sonnet-4.5`) or an AI SDK `LanguageModel` | Vercel OIDC (automatic on Vercel) or `AI_GATEWAY_API_KEY` | Vercel AI Gateway (or the provider console, for a provider `LanguageModel`) |
-| Nested dev-agent (Claude Code CLI) | INSIDE the Vercel Sandbox | `createClaudeCode({ model? })` | `ANTHROPIC_AUTH_TOKEN` (subscription OAuth from `claude setup-token`) | Claude subscription + its extra-usage credits |
+| Nested dev-agent (Claude Code CLI) | INSIDE the Vercel Sandbox | `createClaudeCode({ auth: { anthropic: { authToken } }, model? })` — the explicit auth block is REQUIRED (see below) | `ANTHROPIC_AUTH_TOKEN` (subscription OAuth from `claude setup-token`) | Claude subscription + its extra-usage credits |
 | Sandbox compute | Vercel | — | — | Vercel (vCPU-minutes + snapshot storage); unavoidable |
 
 ## The latency/cost split
@@ -50,11 +53,12 @@ Turn routing, comment posting, and result formatting do not need a frontier mode
 
 **eve's loop cannot authenticate with a Claude subscription token.** This is the single fact the whole design hangs on — do not re-litigate it:
 
-- `defineAgent`'s `model` accepts ONLY (a) a Gateway model string, or (b) an AI SDK `LanguageModel` backed by a provider API key. There is no way to hand eve a subscription OAuth token (`sk-ant-oat01…`). Verified against eve 0.24.x bundled docs and source.
-- The structural reason: the loop's model call happens on the **host** (the Vercel function). Subscription auth is a Claude-Code-surface entitlement — it only works where the entire Claude Code CLI runs. In this pattern that is *inside the sandbox*, via `@ai-sdk/harness-claude-code`, which resolves `ANTHROPIC_AUTH_TOKEN` from the environment natively.
+- `defineAgent`'s `model` accepts ONLY (a) a Gateway model string, or (b) an AI SDK `LanguageModel` backed by a provider API key. There is no way to hand eve a subscription OAuth token (`sk-ant-oat01…`). Verified against eve 0.24.x and 0.27.x bundled docs and source.
+- The structural reason: the loop's model call happens on the **host** (the Vercel function). Subscription auth is a Claude-Code-surface entitlement — it only works where the entire Claude Code CLI runs. In this pattern that is *inside the sandbox*, via `@ai-sdk/harness-claude-code`.
+- **And the harness must be told explicitly.** Since `@ai-sdk/harness-claude-code` ≥1.0.42, its auth resolution prefers gateway credentials found in the env (automatic OIDC on Vercel) over `ANTHROPIC_AUTH_TOKEN` when no `auth` block is passed — the nested agent then silently bills Opus through the AI Gateway at API prices (a real US$7.79/week leak, caught 2026-07-27). `createClaudeCode` MUST receive `auth: { anthropic: { authToken: process.env.ANTHROPIC_AUTH_TOKEN } }`; see [docs/05-dev-agent.md](05-dev-agent.md).
 - Subscription extra-usage credits only burn on Claude-Code surfaces with subscription auth. They do NOT apply to Gateway or `ANTHROPIC_API_KEY` traffic. That is exactly why the heavy layer uses the harness: the expensive runs draw on a flat-rate subscription instead of metered API billing.
 
-So the **only** place the subscription token appears is `agent/lib/dev-agent.ts`, where it is guarded for presence and forwarded into the harness. It never configures the loop model, and it never appears in prompts or logs.
+So the **only** place the subscription token appears is `agent/lib/dev-agent.ts`, where it is guarded for presence and passed EXPLICITLY as the harness's `auth.anthropic.authToken`. It never configures the loop model, and it never appears in prompts or logs.
 
 **Accepted risk (state it in your own design doc):** the token is forwarded to the sandbox bridge, so it exists inside a sandbox that processes untrusted content (PR diffs, comments). Mitigations: the token is revocable, blast radius is subscription quota — not org data — and the orchestrator's security-boundary instructions (see [docs/04-orchestrator.md](04-orchestrator.md)) treat all webhook content as untrusted input.
 
