@@ -281,6 +281,11 @@ function requireSubscriptionToken(): void {
 
 function makeHarness() {
   return createClaudeCode({
+    // REQUIRED since @ai-sdk/harness-claude-code >=1.0.42: without an explicit
+    // `auth` block, gateway credentials from the env (automatic OIDC on Vercel)
+    // WIN over ANTHROPIC_AUTH_TOKEN and Claude Code bills through AI Gateway at
+    // API prices instead of the subscription. Do not remove.
+    auth: { anthropic: { authToken: process.env.ANTHROPIC_AUTH_TOKEN } },
     // Omit `model` entirely when DEV_AGENT_MODEL is unset (Claude Code default).
     ...(process.env.DEV_AGENT_MODEL ? { model: process.env.DEV_AGENT_MODEL } : {}),
     thinking: { type: "adaptive" },
