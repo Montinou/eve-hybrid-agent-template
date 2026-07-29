@@ -192,6 +192,101 @@ Never fork `dev-agent.ts` per capability — one shared lib, N thin tools. Modes
 need different sandbox access (read-only vs read-write) are a `mode` parameter into
 `buildInstructions`, not a second lib.
 
+## Configuring a write-capable capability (autonomous push)
+
+The default capabilities are read-only: `buildInstructions` hands the sandboxed agent
+a clause forbidding branches, commits and pushes, and the agent's whole deliverable is
+a report. A write-capable capability — one that opens pull requests on its own — is the
+same lib with a different mode, plus the configuration below.
+
+Two shapes exist for getting a change out of the sandbox. Pick deliberately; the
+tradeoff is real and neither answer is wrong.
+
+| | **Autonomous push** (the default this template documents) | **Host-side commit** |
+|---|---|---|
+| Who writes to the remote | The sandboxed agent: `git checkout -b`, commit, `git push` | The host, from file contents the agent reported |
+| Where the git credential lives | On disk in the session, for the whole run | Only in the host process |
+| When paths can be validated | After the push, by a human reading the PR | Before anything remote exists |
+| Flexibility | The agent handles any change shape: many files, several commits, a rebase | One commit, whole files, no history rewriting |
+| Best for | Product-code fixes, where the set of files a fix touches is not knowable in advance | A narrow, enumerable write surface (e.g. only a test directory) |
+
+**Start with autonomous push.** It is the simpler mental model, it does not constrain
+what the agent can accomplish, and the guardrails it needs are prose plus the estate
+gate below — which is enough while a human reviews every PR. Tighten later, if and
+when a real incident tells you where the limit belongs; a guardrail invented before
+you have evidence usually restricts the wrong thing.
+
+### 1. Gate it in the estate — two independent conditions
+
+Add a per-repo flag (`writeEnabled`) to the registry, and intersect it with an
+environment variable:
+
+```ts
+/** Repos a write-capable run may push to right now (env allowlist ∩ writeEnabled). */
+export function writeAllowlist(): EstateRepo[] {
+  const allowed = (process.env.AGENT_WRITE_REPOS ?? "")
+    .split(",").map((r) => r.trim()).filter(Boolean);
+  return ESTATE.filter(
+    (r) => r.writeEnabled && (allowed.includes(r.repo) || allowed.includes(r.dir)),
+  );
+}
+```
+
+The intersection is the point: enabling a repo takes **both** a deploy and an
+environment change, so no single commit — and no single agent — can widen the blast
+radius alone. Ship every repo with `writeEnabled: false` and the env var unset, so
+the capability is inert until someone deliberately turns it on.
+
+### 2. Keep the git credential alive for that mode only
+
+`onSession` writes `~/.git-credentials` so the clone can authenticate. Read-only modes
+should tear it down once the estate sync finishes; a write-capable mode needs it for
+the whole run. Make the teardown conditional on the mode rather than removing it
+globally — a `review` capability has no reason to hold a push-capable token.
+
+### 3. Write the rules as prose, ranked
+
+The mode's instructions carry what the code no longer enforces. Rank them explicitly —
+the moment that matters is when the agent is choosing between shipping something
+doubtful and admitting it found nothing, and the hierarchy of the text is what decides
+that. A working set, adapted from a production agent:
+
+- Never commit to a default branch. One feature branch per repo, named per that repo's
+  conventions; check `git ls-remote` first and suffix it if the branch exists.
+- Never touch: migrations, `.github/workflows`, infrastructure code, auth or security
+  logic, dependency upgrades. (CI config deserves its own mention — it runs with
+  secrets.)
+- Run the repo's validation commands before pushing, and report honestly what passed,
+  what failed, and what could not run.
+- Verify the push landed (`git ls-remote`) before reporting a branch.
+- **Push nothing if the change is unsafe, ambiguous, or out of bounds, and say why.
+  That is a good outcome, not a failure.** Give this rule the same rank as the
+  prohibitions, not a footnote.
+
+Put per-repo specifics (branch naming, commit format, PR target, validation commands,
+that repo's forbidden zones) in the per-repo skill markdown, so they can be tuned
+without a redeploy.
+
+### 4. Decide who opens the pull request
+
+Either works, and it is independent of who pushes:
+
+- **The agent**, via a `create_pull_request` tool — most autonomous, and the agent can
+  fill the body with what it actually ran.
+- **The host**, after the agent reports the branch — gives you one deterministic place
+  to attach a ticket, apply labels, and surface in the PR body anything a reviewer
+  should look at first (for example, which files outside the expected area were
+  touched). This is visibility, not enforcement, and it costs nothing.
+
+Whoever opens it, open it as a **draft** and never give the agent a merge tool. A
+human merging is the backstop that makes everything above safe enough to start with.
+
+### 5. Leave the audit trail honest
+
+Record in the design doc which shape you chose and what it trades away. A doc that
+claims a property the code does not have is worse than one that admits the gap — the
+next reader will trust it, and the gap is exactly what they would have checked.
+
 ## Verification
 
 - `pnpm typecheck && pnpm test` — the lib's pure helpers (budget resolution and

@@ -105,6 +105,19 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 - [ ] Per-run secrets (if any) wired via `DEV_TASK_SECRETS_JSON` — never in prompts
 - [ ] Additional capabilities cloned from the `run_dev_task` pattern
       (prompt builder in `lib/` + thin `defineTool` + one prompt-contract line)
+- [ ] **If any capability writes** (opens PRs on its own) — see
+      [docs/05-dev-agent.md § Configuring a write-capable capability](05-dev-agent.md#configuring-a-write-capable-capability-autonomous-push):
+  - [ ] Shape chosen deliberately (autonomous push vs host-side commit) and the
+        choice recorded in your design doc, including what it trades away
+  - [ ] `writeEnabled` per repo **and** `AGENT_WRITE_REPOS` — both required, both
+        shipped off, so no single commit widens the blast radius
+  - [ ] Git credential teardown made conditional on the mode: read-only
+        capabilities must not hold a push-capable token
+  - [ ] Write rules in the mode's instructions, ranked — with "push nothing when
+        it is unsafe or ambiguous, and say why" at the same rank as the prohibitions
+  - [ ] Per-repo forbidden zones in the per-repo skill markdown (tunable without
+        a redeploy)
+  - [ ] PRs open as **drafts**; no merge tool exists anywhere in the agent
 - [ ] **Gate:** `warm_sandbox` returns `ready: true`; a real `run_dev_task` probe
       returns a structured result on the PR
 
