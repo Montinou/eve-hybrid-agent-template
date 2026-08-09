@@ -67,8 +67,8 @@ export const DEFAULT_COMMAND = "run";
  *     the bot ("thanks @bot!") does NOT create a session.
  *  2. Explicit form — `@bot /task <anything>`: the COMMAND_PREFIX token marks
  *     an unambiguous invocation, so ANY subcommand token is accepted and
- *     passed through (the orchestrator answers unknown commands with a usage
- *     message instead of running a capability — see agent/instructions.md).
+ *     passed through — what the orchestrator does with it is a prompt
+ *     decision (agent/instructions.md §Command turns), not a dispatch one.
  *     A bare `@bot /task` resolves to DEFAULT_COMMAND.
  *
  * Returns null (do NOT dispatch a turn) when `body` is not a string, the

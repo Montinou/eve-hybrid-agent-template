@@ -17,8 +17,9 @@ budget, so the template is warmed OUT of band and the runs only fork it.
    the first run of the day never pays the cold build. Do not remove it.
 3. **Recipe changes invalidate by construction:** the template's identity
    hashes the enabled repo+branch set AND `RECIPE_VERSION`. Changing clones,
-   installs or sandbox resources requires bumping `RECIPE_VERSION` in
-   `lib/dev-agent.ts` — the next warm rebuilds automatically.
+   installs or sandbox resources requires bumping `RECIPE_VERSION` (the env
+   var, or the code default in `lib/dev-agent.ts`) — the next warm rebuilds
+   automatically.
 4. **Steady-state inventory** (report deviations, never mass-delete):
    1 template sandbox + at most 2 template snapshots + nothing else
    lingering. Sweeps run inside the warm itself (`lib/template-sweep.ts`).

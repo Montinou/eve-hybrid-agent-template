@@ -71,7 +71,8 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
       (Sensitive) in Vercel; App webhook URL → `POST /eve/v1/github`
 - [ ] Dispatch rules adapted in `agent/lib/dispatch.ts` (pure functions; every
       attribute a tool will need projected into `auth.attributes`)
-- [ ] `agent/channels/github.ts` bot name updated
+- [ ] Bot name updated — the `BOT_NAME` constant in `agent/lib/dispatch.ts`
+      (`agent/channels/github.ts` only imports it), or set `GITHUB_APP_SLUG`
 - [ ] `agent/channels/eve.ts` auth policy reviewed — the shipped
       `[vercelOidc(), localDev()]` never admits browser users or external
       clients; wire real auth (Clerk/Auth.js/API-key/OIDC) BEFORE exposing the
@@ -83,11 +84,12 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 ## Phase 3 — Orchestrator brain ([docs/04-orchestrator.md](04-orchestrator.md))
 
 - [ ] `agent/instructions.md` rewritten for your domain — all six sections kept
+      (identity, task contract, skills, security boundary, unattended, output
+      contract)
 - [ ] `agent/skills/*.md` rewritten: one workflow guide per procedure your
       agent owns (start from the shipped `dev-task`, `github-triage`,
       `sandbox-maintenance`, `release-check/`); descriptions written as
       routing hints; the prompt's Skills section lists exactly these
-      (identity, task contract, security boundary, unattended, output contract)
 - [ ] Command→tool mapping in the prompt matches `dispatch.ts` attributes
 - [ ] Loop models chosen (`ORCHESTRATOR_MODEL` / `COMMAND_MODEL`) or defaults kept
 - [ ] `pnpm hash-instructions` re-run and hash committed
@@ -110,7 +112,8 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 
 - [ ] Sandbox knobs reviewed (defaults are sane); `keepLastSnapshots` still
       `{ count: 2 }`; fork-teardown patch untouched
-- [ ] `agent/schedules/template-maintenance.md` cron time suits your timezone
+- [ ] `agent/schedules/template-maintenance.md` cron set to a suitable slot
+      (Vercel evaluates schedule crons in UTC)
 - [ ] `RECIPE_VERSION` set; bumped after any recipe edit you made in phase 4
 - [ ] **Gate:** double-warm is a fast no-op; 30 min after a real run the
       sandbox/snapshot inventory matches the steady state

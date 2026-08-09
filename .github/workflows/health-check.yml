@@ -30,8 +30,8 @@ jobs:
           exit 1
         env:
           HEALTH_URL: ${{ vars.EVE_HEALTH_URL }}
-      # Until the Resend secret/vars are configured, this step simply fails
-      # alongside the ping — the red workflow run is itself the alert.
+      # Until the Resend secret/vars are configured this step cannot deliver
+      # mail — the red workflow run (the failed ping) is itself the alert.
       - name: Alert via Resend
         if: failure()
         # Body built with jq --arg so from/to/url values are JSON-escaped — a

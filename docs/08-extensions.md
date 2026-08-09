@@ -136,8 +136,8 @@ Each extension carries its own check:
 - **Journal:** trigger a capability twice, confirm exactly one journal record per
   logical run (idempotent key) in the Blob store; `recall` returns it; a probe
   with Blob credentials removed still completes the turn (append fails soft).
-- **Evals:** `pnpm exec eve evals run` (see `evals/running.mdx`) passes on the
-  shipped routing eval.
+- **Evals:** `pnpm exec eve eval` (see `node_modules/eve/docs/evals/running.mdx`)
+  passes on the shipped routing eval.
 - **Email:** send a test digest to yourself; confirm a bogus `RESEND_API_KEY`
   produces a `partial`/noted result, not a failed turn.
 

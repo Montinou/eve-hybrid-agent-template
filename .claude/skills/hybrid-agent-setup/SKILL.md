@@ -120,13 +120,16 @@ deployed health check returns 200.**
 
 **Files to edit:**
 
-- `agent/channels/github.ts` — set the bot name (`// CUSTOMIZE:` marker).
-- `agent/lib/dispatch.ts` + `agent/lib/dispatch.test.ts` — the pure dispatch
-  functions: which events create sessions, the command parser, and **every
-  attribute tools will need later** (tools can see NOTHING except
-  `SessionAuthContext.attributes` — project shas, branch, changed files, and
-  the command attribute here; set the command attribute LAST so raw payload
-  fields can't clobber it).
+- `agent/lib/dispatch.ts` + `agent/lib/dispatch.test.ts` — set the bot name at
+  the `BOT_NAME` `// CUSTOMIZE:` marker (or override it with
+  `GITHUB_APP_SLUG`), then the pure dispatch functions: which events create
+  sessions, the command parser, and **every attribute tools will need later**
+  (tools can see NOTHING except `SessionAuthContext.attributes` — project
+  shas, branch, changed files, and the command attribute here; set the command
+  attribute LAST so raw payload fields can't clobber it).
+- `agent/channels/github.ts` — normally no edits: it imports `BOT_NAME` from
+  `agent/lib/dispatch.ts`, so the mention dispatch and the command parser can
+  never disagree.
 - `agent/lib/estate.ts` — add every estate repo now, with `enabled: false`;
   enabling is Phase 4's checklist.
 - `agent/lib/github-token.ts` — normally no edits.
@@ -225,9 +228,13 @@ improvise here.
 - `agent/lib/estate.ts` — flip `enabled: true` per repo, **only after** the
   App is installed on it (Phase 2) and branch/package-manager/runtime are
   verified.
-- `agent/lib/dev-agent.ts` — the `// CUSTOMIZE:` markers only: sandbox
-  `runtime`, the bootstrap recipe (clone/install steps), the nested-agent
-  instructions block. Bump `RECIPE_VERSION` on ANY recipe change.
+- `agent/lib/dev-agent.ts` — the `// CUSTOMIZE:` markers only: the
+  `DevAgentMode` union, extra secret-redaction patterns, the nested-agent
+  instructions block (identity + access contract + one MODE line per mode),
+  and the harness agent id. The sandbox `runtime` is NOT set here — it comes
+  from `sandboxRuntime()` in `agent/lib/estate.ts`. Bump `RECIPE_VERSION` on
+  ANY change to the bootstrap recipe (clone/install steps, CA prelude,
+  provider resources).
 - `agent/lib/build-task-prompt.ts` (+ its test) — the domain prompt builder.
   Resolve anything the sandbox can't reach (external URLs, ticket data)
   host-side in the tool and embed it as content; the sandbox has no
@@ -272,7 +279,8 @@ mystery costs.
 
 **Questions for the human:**
 
-- Daily maintenance time (cron in the agent's timezone; default `0 7 * * *`).
+- Daily maintenance time (Vercel evaluates schedule crons in UTC; default
+  `0 7 * * *` = 07:00 UTC).
 - Accept default expirations? `SANDBOX_IDLE_TIMEOUT_MS` 300000,
   `SANDBOX_SNAPSHOT_EXPIRATION_MS` 7d, `TEMPLATE_SNAPSHOT_EXPIRATION_MS` 7d
   (the last one is the harness knob — distinct lifecycle).
@@ -376,7 +384,7 @@ statuses. **The agent is not "done" until a full probe PR passed.**
    strings, prompts, skill files, or logs; even key NAMES go via env (shell
    quoting eats `JSON.stringify` quotes). Redact secret-shaped text in every
    diagnostics path.
-8. **Unique sessionId per attempt** (`<mode>-<target>-<ts36>`): a failed run
+8. **Unique sessionId per attempt** (`dev-<mode>-<target>-<ts36>`): a failed run
    orphans a half-created sandbox under that name and reuse 400s forever.
    Sweep on `createSession` failure too.
 9. **eve channel sandbox needs

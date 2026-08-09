@@ -263,11 +263,11 @@ const BOOTSTRAP_HASH = bootstrapHash({
 });
 
 /**
- * Presence guard for the subscription token. The claude-code harness
- * resolves ANTHROPIC_AUTH_TOKEN from the env automatically and forwards it
- * to the sandbox bridge (verified in @ai-sdk/harness-claude-code:
- * `authToken = explicit?.authToken ?? processEnv.ANTHROPIC_AUTH_TOKEN`), so
- * we pass NO auth block — we only fail loudly here when it is unset.
+ * Presence guard for the subscription token. The token is passed EXPLICITLY
+ * in makeHarness()'s `auth` block (required since
+ * @ai-sdk/harness-claude-code >=1.0.42 — see the comment there). This guard
+ * exists only to fail loudly and early when the env var is unset, instead of
+ * letting the run reach the sandbox and fail with an opaque auth error.
  */
 function requireSubscriptionToken(): void {
   if (!process.env.ANTHROPIC_AUTH_TOKEN) {

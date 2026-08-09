@@ -87,8 +87,8 @@ and `diagnostics` **verbatim, never paraphrased or truncated**. Verbatim matters
 diagnostics are already redacted host-side (see [docs/05-dev-agent.md](05-dev-agent.md)
 §Secrets), and a paraphrasing model destroys the debugging signal.
 
-Keep the whole file under ~100 lines. The orchestrator model is a mid-tier model;
-a long prompt costs per-turn money and dilutes the contract.
+Keep the whole file under ~100 lines. The orchestrator runs on the cheapest
+capable model; a long prompt costs per-turn money and dilutes the contract.
 
 ## Per-turn model routing
 

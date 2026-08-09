@@ -21,12 +21,12 @@ const agent = new HarnessAgent({
     thinking: { type: "adaptive" },
     maxTurns: 200,
   }),
-  id: "dev-agent",
+  id: "hybrid-dev-agent",                      // CUSTOMIZE: your agent's id
   instructions: buildInstructions(mode, budgetMs, target, branch),
   tools: { report_result: reportResultTool },  // host tool, proxied via internal MCP
   permissionMode: "allow-all",
   sandbox: makeSandboxProvider(),              // createVercelSandbox(...)
-  sandboxConfig: makeSandboxConfig(state, target, sessionSecrets),
+  sandboxConfig: makeSandboxConfig(state, { repo: target, branch }, sessionSecrets),
 });
 const session = await agent.createSession({ sessionId, abortSignal: budgetSignal });
 const result = await agent.generate({ session, prompt, abortSignal: budgetSignal });
@@ -143,14 +143,14 @@ const reportResultSchema = z.object({
   `createSession` failure, budget abort, crash — returns a structured
   `failed`/`partial` result with redacted diagnostics. The orchestrator treats
   `failed` as data to report, not a reason to stop other capabilities.
-- Session ids are unique per **attempt** (`` `${mode}-${target}-${Date.now().toString(36)}` ``):
+- Session ids are unique per **attempt** (`` `dev-${mode}-${target.dir}-${Date.now().toString(36)}` ``, sliced to 60 chars):
   a failed run can orphan a half-created sandbox under its name, and reusing that
   id 400s deterministically forever. On `createSession` failure the lib sweeps
   that session's sandbox and snapshots immediately, then returns a structured
   failure (gotcha #8).
 - Type note: `@ai-sdk/harness` resolves its own nested `ai` copy, so its Tool type
-  is nominally distinct — the host tool is cast at the boundary. The `// CUSTOMIZE`
-  comment in the lib marks it.
+  is nominally distinct — the host tool is cast at the boundary. The `// Cast:`
+  comment in the lib explains it.
 
 ## The estate registry
 

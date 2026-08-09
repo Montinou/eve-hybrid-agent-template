@@ -53,11 +53,13 @@ Provider configuration (in `dev-agent.ts`):
 
 ```ts
 createVercelSandbox({
-  runtime: "node22",          // match the TARGET repo's engines, not the host's (gotcha #3)
+  runtime: sandboxRuntime(),  // from estate.ts: the TARGET repos' engines pin,
+                              // never the host's (gotcha #3)
   resources: { vcpus: 8 },
   timeout: 45 * 60 * 1000,
   ports: [4000],              // the claude-code bridge needs ≥1 exposed TCP port
-  tags: { app: "{{AGENT_NAME}}" },  // makes sweeps and dashboard filtering possible
+  tags: { app: SANDBOX_TAG_VALUE },  // template-sweep.ts; CUSTOMIZE to {{AGENT_NAME}}
+                                     // — makes sweeps and dashboard filtering possible
   snapshotExpiration: resolveTemplateSnapshotExpirationMs(),  // 7 d
   keepLastSnapshots: { count: 2, deleteEvicted: true },
 })
@@ -129,7 +131,8 @@ Check the Vercel dashboard (Sandboxes) after a few days of operation. Healthy is
 exactly:
 
 - **1** harness template sandbox + **≤2** template snapshots (`keepLastSnapshots`);
-- eve channel: template snapshot ≤7 d old, session snapshots ≤24 h (eve-managed);
+- eve channel: its own template plus per-session snapshots, all eve-managed and
+  expiring per `SANDBOX_SNAPSHOT_EXPIRATION_MS` (7 d default);
 - at most 1 fork snapshot pending <30 min between runs (only if a fallback
   stop+delete fired — the teardown patch normally keeps this at zero);
 - **nothing else.**

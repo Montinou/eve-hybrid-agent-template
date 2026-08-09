@@ -96,7 +96,7 @@ A useful middle ground: start plain, and adopt only the pieces you need. The tem
 
 ## Real-world example
 
-This template is the domain-stripped scaffold of a production QA agent: a GitHub App listens to PR events on a frontend monorepo, a flash-lite model handles high-frequency shadow turns, `@bot` commands route to a Haiku orchestrator, and nested Claude Code runs code review / test planning / preview validation inside the sandbox against a multi-repo estate. Everything here — the budget clamp, the fork-teardown patch, the bridge-asset copy — exists because it failed in that production system first.
+This template is the domain-stripped scaffold of a production QA agent: a GitHub App listens to PR events on a frontend monorepo, a flash-lite model handles high-frequency shadow turns, `@bot` commands route to a mid-tier orchestrator model, and nested Claude Code runs code review / test planning / preview validation inside the sandbox against a multi-repo estate. Everything here — the budget clamp, the fork-teardown patch, the bridge-asset copy — exists because it failed in that production system first.
 
 ## Where each concept lives in the template
 
