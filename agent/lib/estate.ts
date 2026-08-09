@@ -35,6 +35,15 @@ export const ESTATE_ROOT = "/vercel/sandbox/estate";
  * engines pin, NOT the agent app's own node version (the agent runs on node
  * 24.x; a target repo pinned to node 22 needs a node22 sandbox). One shared
  * template = one runtime — see sandboxRuntime() below.
+ *
+ * Forward note: `@vercel/sandbox` 3.0.0 DEPRECATED `runtime` in favor of
+ * Vercel Managed Images (`image: "vercel/sandbox/node:24"`, defaulting to the
+ * Ubuntu-based `vercel/sandbox/universal`), and passing both is an error.
+ * Runtime ids stay supported through the legacy v2 create API, and the option
+ * this value actually feeds is `createVercelSandbox({ runtime })` in
+ * dev-agent.ts — owned by `@ai-sdk/sandbox-vercel`, which still resolves
+ * `@vercel/sandbox` ^2 for itself. So `runtime` remains the correct spelling
+ * here; revisit this type only once that package exposes an `image` option.
  */
 export type SandboxRuntime = "node22" | "node24" | "node26" | (string & {});
 

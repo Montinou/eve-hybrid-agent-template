@@ -33,7 +33,8 @@ const result = await agent.generate({ session, prompt, abortSignal: budgetSignal
 ```
 
 **The explicit `auth` block is REQUIRED — do not remove it.** Since
-`@ai-sdk/harness-claude-code` ≥1.0.42, the bridge's auth resolution prefers
+`@ai-sdk/harness-claude-code` ≥1.0.42 (precedence re-verified unchanged at
+1.0.65), the bridge's auth resolution prefers
 **gateway credentials found in the environment** (automatic OIDC on Vercel)
 over `ANTHROPIC_AUTH_TOKEN` whenever no explicit `auth` block is passed. On
 Vercel that branch always wins, so an auth-less `createClaudeCode` silently

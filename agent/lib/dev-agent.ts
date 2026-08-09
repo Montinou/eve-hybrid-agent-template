@@ -76,6 +76,12 @@ const CA_PRELUDE =
   `[ -n "$CA" ] || { echo "NO USABLE CA BUNDLE" >&2; ls -la /etc/pki/tls/certs/ /etc/ssl/certs/ >&2; exit 78; }; ` +
   `git config --global http.sslCAInfo "$CA"`;
 
+// Where the Claude Code adapter installs its bridge inside the sandbox,
+// relative to the session's default working directory. Literal replication of
+// an unexported upstream constant — see the probe in makeSandboxConfig()'s
+// onSession for the full rationale and the re-verification instructions.
+const BRIDGE_PROBE_PATH = ".harness-bootstrap/claude-code/bridge.mjs";
+
 // CUSTOMIZE: add domain-specific modes here as you clone run_dev_task into
 // domain capabilities (e.g. "review" | "verify" | "test-plan"), and give
 // each a MODE line in buildInstructions() below. See docs/05-dev-agent.md.
@@ -265,9 +271,10 @@ const BOOTSTRAP_HASH = bootstrapHash({
 /**
  * Presence guard for the subscription token. The token is passed EXPLICITLY
  * in makeHarness()'s `auth` block (required since
- * @ai-sdk/harness-claude-code >=1.0.42 — see the comment there). This guard
- * exists only to fail loudly and early when the env var is unset, instead of
- * letting the run reach the sandbox and fail with an opaque auth error.
+ * @ai-sdk/harness-claude-code >=1.0.42, re-verified against 1.0.65 — see the
+ * comment there). This guard exists only to fail loudly and early when the
+ * env var is unset, instead of letting the run reach the sandbox and fail
+ * with an opaque auth error.
  */
 function requireSubscriptionToken(): void {
   if (!process.env.ANTHROPIC_AUTH_TOKEN) {
@@ -285,6 +292,13 @@ function makeHarness() {
     // `auth` block, gateway credentials from the env (automatic OIDC on Vercel)
     // WIN over ANTHROPIC_AUTH_TOKEN and Claude Code bills through AI Gateway at
     // API prices instead of the subscription. Do not remove.
+    //
+    // Re-verified against 1.0.65 (node_modules/@ai-sdk/harness-claude-code/
+    // dist/index.js, `resolveClaudeCodeEnv`): an `auth.anthropic` object is
+    // checked FIRST and returns before the gateway env is even read, whereas
+    // with no `auth` block a truthy `getAiGatewayAuthFromEnv().apiKey` still
+    // short-circuits to `pickGateway` ahead of the ANTHROPIC_AUTH_TOKEN
+    // fallback. Precedence unchanged since 1.0.42.
     auth: { anthropic: { authToken: process.env.ANTHROPIC_AUTH_TOKEN } },
     // Omit `model` entirely when DEV_AGENT_MODEL is unset (Claude Code default).
     ...(process.env.DEV_AGENT_MODEL ? { model: process.env.DEV_AGENT_MODEL } : {}),
@@ -600,6 +614,22 @@ function makeSandboxConfig(
       // 3) Probes: repo SHAs + adapter bridge survival across the fork,
       //    recorded into `state` so diagnostics can show what the sandbox
       //    actually contained without a separate lookup.
+      //
+      // BRIDGE_PROBE_PATH replicates @ai-sdk/harness-claude-code's private
+      // `BOOTSTRAP_DIR` constant (node_modules/@ai-sdk/harness-claude-code/
+      // dist/index.js), which the adapter resolves against the sandbox
+      // session's default working directory. Since `session.run` is called
+      // WITHOUT `workingDirectory` — @ai-sdk/sandbox-vercel then omits `cwd`
+      // and the command runs in that same default dir — a relative path is
+      // the faithful, cwd-agnostic spelling of the adapter's own location.
+      // Not exported by that package, so this is fragile against an upstream
+      // rename in exactly the way template-sweep.ts's name prefixes are: if
+      // the probe starts reporting MISSING after a dependency bump, re-verify
+      // this constant first. It moved once already — it was the absolute
+      // `/tmp/harness/claude-code` until @ai-sdk/harness-claude-code 1.0.54
+      // (changelog bdde5d9, "avoid placing harness bootstrap files in `/tmp`
+      // and instead use sandbox working directory"), which is precisely why
+      // the probe is diagnostic-only and never gates the run.
       const verify = await session.run({
         command:
           enabled
@@ -610,7 +640,7 @@ function makeSandboxConfig(
             )
             .join(" && ") +
           ` && printf 'bridge:%s' ` +
-          `"$([ -f /tmp/harness/claude-code/bridge.mjs ] && echo present || echo MISSING)"`,
+          `"$([ -f ${BRIDGE_PROBE_PATH} ] && echo present || echo MISSING)"`,
         ...(abortSignal ? { abortSignal } : {}),
       });
       state.estate =
@@ -770,9 +800,14 @@ async function runOnce(params: {
     // CUSTOMIZE: your agent's id (shows up in harness logs/traces).
     id: "hybrid-dev-agent",
     instructions: buildInstructions(mode, budgetMs, target, branch),
-    // Cast: @ai-sdk/harness resolves its own nested copy of `ai`, so its
-    // Tool type is structurally identical but nominally distinct from ours.
-    // Runtime shape is the same.
+    // Cast: @ai-sdk/harness depends on an EXACT `ai` version (see its
+    // package.json), so without the `resolutions` pin in this repo's
+    // package.json it resolves its own nested copy — making its Tool type
+    // structurally identical but nominally distinct from ours. Runtime shape
+    // is the same either way. With the pin in place the two dedupe to one
+    // copy and this cast is currently a no-op; it is kept as the safeguard
+    // that lets the app's `ai` pin and the harness's diverge without breaking
+    // the typecheck. Drop it only together with the resolutions pin.
     tools: { report_result: reportResultTool as never },
     permissionMode: "allow-all",
     debug: { enabled: true },

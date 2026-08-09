@@ -62,7 +62,8 @@ export interface SandboxListItem {
  * 'ai-sdk-harness-session'`). Not exported by that package either, so this
  * is fragile against an upstream rename — if the sweep silently stops
  * matching any sandbox after a dependency bump, re-verify these two strings
- * first.
+ * first. Last re-verified against @ai-sdk/sandbox-vercel 1.0.64 (both
+ * unchanged).
  */
 const HARNESS_TEMPLATE_NAME_PREFIX = "ai-sdk-harness-";
 const HARNESS_SESSION_NAME_PREFIX = "ai-sdk-harness-session-";

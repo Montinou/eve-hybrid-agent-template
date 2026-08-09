@@ -358,7 +358,8 @@ statuses. **The agent is not "done" until a full probe PR passed.**
    Do not re-litigate this.
    **AND the harness must receive the token EXPLICITLY:**
    `createClaudeCode({ auth: { anthropic: { authToken: process.env.ANTHROPIC_AUTH_TOKEN } } })`.
-   Since `@ai-sdk/harness-claude-code` ≥1.0.42, env gateway credentials
+   Since `@ai-sdk/harness-claude-code` ≥1.0.42 (precedence re-verified
+   unchanged at 1.0.65), env gateway credentials
    (automatic OIDC on Vercel) outrank `ANTHROPIC_AUTH_TOKEN` when no auth
    block is passed, and the nested agent silently bills Opus through the AI
    Gateway at API prices (real US$7.79/week leak, caught 2026-07-27).
