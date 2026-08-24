@@ -124,6 +124,15 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 ## Phase 5 — Lifecycle + cost hygiene ([docs/06-sandbox-lifecycle.md](06-sandbox-lifecycle.md))
 
 - [ ] Sandbox knobs reviewed (defaults are sane); `keepLastSnapshots` still
+- [ ] `EVE_DEPLOY_HOOK_URL` set to a production-branch Deploy Hook — the
+      only supported way to reprovision eve's own template once its snapshot
+      lapses (docs/06-sandbox-lifecycle.md)
+- [ ] Daily `template-maintenance` schedule deployed and observed running:
+      its `eve` result must report `healthy: true`
+- [ ] Weekly job (if you have one) calls `warm_sandbox` with `deep: true`
+- [ ] `SANDBOX_SNAPSHOT_EXPIRATION_MS` NOT shortened to "save storage" —
+      it governs the template too, and a short TTL turns a quiet week into
+      an outage
       `{ count: 2 }`; fork-teardown patch untouched
 - [ ] `agent/schedules/template-maintenance.md` cron set to a suitable slot
       (Vercel evaluates schedule crons in UTC)
@@ -137,6 +146,13 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 - [ ] All env vars from the table above set in Vercel; secrets Sensitive
 - [ ] CI green (typecheck + vitest + instructions-hash gate)
 - [ ] `EVE_HEALTH_URL` repo variable set; health-check workflow dispatched
+- [ ] `sandbox-health.yml` enabled with `secrets.AGENT_API_KEY` — health
+      pings alone cannot see a dead sandbox
+- [ ] `harness-auth-contract.test.ts` kept and its version pin current —
+      it is the only guard against a dependency bump silently moving
+      billing from your subscription to the AI Gateway
+- [ ] Branch validated against its protected preview with
+      `EVE_BYPASS_TOKEN` before merging any dependency bump
       manually once and green; Resend alert configured (or consciously skipped)
 - [ ] `ANTHROPIC_AUTH_TOKEN` rotation date in a human calendar
 - [ ] **Gate:** the E2E probe PR — every capability exercised through the real

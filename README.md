@@ -74,14 +74,26 @@ Why this shape works:
   Claude Code task against a repo of your estate). Clone it into your own
   domain capabilities.
 - **`agent/tools/warm_sandbox.ts` + `agent/schedules/template-maintenance.md`**
-  — out-of-band template warming and daily snapshot/cost sweeps.
+  — out-of-band warming of BOTH templates and daily snapshot/cost sweeps.
+- **`agent/lib/eve-sandbox.ts`** — keeps eve's *own* sandbox template alive.
+  eve provisions that template only during a build and cannot reprovision it
+  on a deployment, so when its snapshot lapses the agent silently loses repo
+  access — health endpoint still green — until someone redeploys. This renews
+  it, fires a Deploy Hook when it is already gone, and sweeps dead session
+  records that would otherwise pin a session to a sandbox that cannot resume.
 - **`agent/lib/estate.ts`** — the repo registry: which repos the agent may
   touch, on which branch, with which package manager and runtime.
 - **`scripts/copy-bridge-assets.mjs`** — the mandatory post-build step that
   makes the nested Claude Code bridge survive eve's bundler.
+- **`scripts/orchestrate.mjs`** — drive the deployed agent from a terminal or
+  from CI, including against a protection-gated preview deployment
+  (`EVE_BYPASS_TOKEN`), so a dependency bump can be validated before it
+  reaches production.
 - **`evals/` + `.github/workflows/`** — a routing eval, CI (typecheck + vitest
-  + instructions-hash gate), and an external health-check cron with email
-  alerting.
+  + instructions-hash gate), and two external crons with email alerting: a
+  health check (is it serving?) and a sandbox health check (can it actually
+  open a sandbox?). The second exists because the first cannot see the
+  difference.
 - **`docs/00`–`09`** — a complete, ordered setup manual.
 - **`.claude/skills/hybrid-agent-setup/SKILL.md`** — a step-by-step setup flow
   any coding agent (Claude Code, Codex, Cursor) can follow to configure the

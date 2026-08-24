@@ -33,6 +33,25 @@ import { BOT_NAME, onCommentDispatch, onPullRequestDispatch } from "#lib/dispatc
 // parser's mention check, so the two can never disagree). Change it there.
 export default githubChannel({
   botName: BOT_NAME,
+  // Acknowledge the moment a command is accepted, before any expensive work
+  // starts: eve reacts 👀 on the triggering comment as the turn begins. A
+  // command that boots a sandbox shows nothing on the PR for minutes, so
+  // without this it looks ignored and people re-post it — which, under the
+  // queue policy below, just lines up a second expensive run. It is the
+  // default, but a channel with its own onComment replaces the default
+  // mention gate, so declare it rather than inherit it.
+  progress: { reactions: true },
+  // eve 0.33 changed the channel default to `turnPolicy: "steer"`: a message
+  // arriving during an active turn CANCELS that turn and starts a
+  // replacement, and "completed side effects are not rolled back". For an
+  // agent whose turns hold a sandbox for minutes that is destructive — a
+  // push landing mid-run abandons a booted fork and throws away the work it
+  // already paid for. Queue instead: the active turn finishes first.
+  //
+  // Scope note: sessions are per conversation (one durable session per
+  // PR/issue/review thread), so this serializes turns WITHIN one thread
+  // only. Work on other PRs still runs concurrently.
+  turnPolicy: "queue",
   onComment: onCommentDispatch,
   onPullRequest: onPullRequestDispatch,
 });

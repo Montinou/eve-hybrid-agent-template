@@ -32,23 +32,44 @@ const session = await agent.createSession({ sessionId, abortSignal: budgetSignal
 const result = await agent.generate({ session, prompt, abortSignal: budgetSignal });
 ```
 
-**The explicit `auth` block is REQUIRED — do not remove it.** Since
-`@ai-sdk/harness-claude-code` ≥1.0.42 (precedence re-verified unchanged at
-1.0.65), the bridge's auth resolution prefers
-**gateway credentials found in the environment** (automatic OIDC on Vercel)
-over `ANTHROPIC_AUTH_TOKEN` whenever no explicit `auth` block is passed. On
-Vercel that branch always wins, so an auth-less `createClaudeCode` silently
-points Claude Code at the AI Gateway and every nested run bills at **API
-prices** instead of the subscription — this exact leak burned US$7.79 of Opus
-in one week (2026-07-27) before it was caught. The explicit
-`auth.anthropic.authToken` forces the subscription branch.
+### Auth: pin the mode, or pay API prices without noticing
 
-Detection signal: `anthropic/claude-*` rows attributed to your project in the
-AI Gateway dashboard after a dev-agent run mean the leak is back —
+`createClaudeCode` is called with **`auth: "direct"`**, and that is not
+decoration. The intuitive assumption — "the bridge picks `ANTHROPIC_AUTH_TOKEN`
+up from the environment on its own" — is false, and it fails in the direction
+that costs money while every test stays green:
+
+| `auth` | What `resolveClaudeCodeEnv` does | Who pays |
+|---|---|---|
+| omitted (`"auto"`, the default) | prefers **AI Gateway** credentials whenever they exist — and on Vercel the OIDC token always exists | your Gateway account, at API prices |
+| `"direct"` | normalizes to `{ anthropic: {} }` → reads `ANTHROPIC_AUTH_TOKEN` | the Claude subscription |
+| `"ai-gateway"` | Gateway only | Gateway |
+
+This exact leak burned **US$7.79 of Opus in one week** (2026-07-27) before it
+was caught. The nested agent runs perfectly either way: nothing errors, no test
+fails, and the only symptom is the invoice.
+
+**Detection signal:** `anthropic/claude-*` rows attributed to your project in
+the AI Gateway dashboard after a dev-agent run mean the leak is back —
 subscription traffic never appears there at all.
+
+Precedence re-verified by reading `resolveClaudeCodeEnv` at 1.0.42, 1.0.65 and
+1.0.88. The object form (`{ anthropic: { authToken } }`) resolves identically
+but is deprecated, and is silently *ignored* by versions that predate it —
+which is its own trap. That is why
+[`agent/lib/harness-auth-contract.test.ts`](../agent/lib/harness-auth-contract.test.ts)
+pins the harness version whose resolution was actually read and fails CI on any
+bump: re-reading the resolver costs two minutes, finding this on a bill costs
+a lot more.
+
+`buildHarnessOptions` also **throws** when `ANTHROPIC_API_KEY` or
+`ANTHROPIC_BASE_URL` sit in the environment next to the subscription token:
+`pickAnthropic` merges those env fallbacks into the sandbox even with an
+explicit mode, re-routing billing just as quietly.
 
 The lib still *guards* the token's presence and fails loudly (with a
 structured `failed` result, see below) when it's missing. This is the only
+place in the whole system where the subscription token does anything.
 place in the whole system where the subscription token does anything.
 
 ## Time budget discipline

@@ -47,6 +47,72 @@ export default defineSandbox({
 - Suspended eve durable sessions show as Active `workflowEntry` runs in the Vercel
   dashboard — zero compute, not errors.
 
+### The eve template dies silently in production — and nothing repairs it
+
+The knobs above govern eve's SESSION snapshots. Behind them sits a **template**
+that nothing in your app touches, and on a Vercel deployment it cannot repair
+itself:
+
+1. eve provisions its template **only during a build**
+   (`internal/nitro/host/vercel-build-prewarm.js`).
+2. That template's snapshot expires on `snapshotExpiration`. Once it lapses,
+   the sandbox record survives as `stopped` with a `currentSnapshotId`
+   pointing at a deleted snapshot, and resuming it returns **HTTP 410**.
+3. eve's repair path — re-prewarm, then retry — is gated on
+   `compiledArtifactsSource.kind === "disk"`
+   (`execution/sandbox/ensure.js`, `createBackendHandleWithPrewarmRetry`). A
+   deployment is never `"disk"`, so `SandboxTemplateNotProvisionedError` is
+   rethrown and **every** later session creation fails until someone
+   redeploys. Verified present in eve 0.27 through 0.44.3.
+
+Observed live: an agent's `SANDBOX_SNAPSHOT_EXPIRATION_MS` was 24 h, its last
+deploy was a Tuesday, and from Thursday onward **not one sandbox was created
+for twelve days**. `/eve/v1/health` answered 200 the entire time. Only the
+tools needing a checkout failed, and they degraded honestly instead of
+erroring — so nothing alerted, and the daily traffic looked normal.
+
+Two platform facts make the fix cheap ([persistent sandboxes][ps]): snapshot
+TTL is *"measured from the snapshot's last use. The timer resets each time the
+snapshot is used"*, and it defaults to **30 days**. Under steady traffic a
+template never expires at all; the TTL only has to cover a drought. Shortening
+`SANDBOX_SNAPSHOT_EXPIRATION_MS` to save storage shortens it for the TEMPLATE
+too — which is what turns a quiet week into an outage.
+
+[`agent/lib/eve-sandbox.ts`](../agent/lib/eve-sandbox.ts) gives eve's template
+the same care the harness template already gets, from the same daily schedule:
+
+- **Renew** before it lapses, in this exact order — each step forced by a
+  measured behaviour: `Sandbox.get({resume:false})` → `update({
+  snapshotExpiration, keepLastSnapshots:{count:2} })` (never auto-resumes) →
+  a trivial `runCommand` to resume → **`snapshot({ expiration })`** →
+  `update({ currentSnapshotId })` → `stop()`.
+  The explicit `snapshot()` is load-bearing: **`stop()` does not mint a new
+  snapshot for a template.** It reuses the existing id and re-applies *that
+  snapshot's own recorded TTL*, so a snapshot minted by a build running a 24 h
+  expiration keeps renewing in 24 h steps forever, no matter what the sandbox
+  record says. Only `snapshot({expiration})` produces the TTL you asked for;
+  the `stop()` afterwards leaves `currentSnapshotId` pointing at it.
+- **Rebuild** when it is already gone, by firing a Vercel Deploy Hook
+  (`EVE_DEPLOY_HOOK_URL`). A build is the only supported way to reprovision an
+  eve template in production.
+- **Sweep dead session records.** `ensureSession()` resolves a session by name
+  and hands back the existing record without checking that it can still
+  resume, so a session whose snapshot expired 410s forever. Deleting the
+  record is what lets that durable session come back — a repair, not hygiene.
+
+Implementation notes worth keeping if you rewrite it:
+
+- eve's names are internal (`eve-sbx-tpl-<backend>-<scope16>-<hash20>`,
+  `eve-sbx-ses-…`). Replicate the prefixes literally and fail *safe* when they
+  stop matching: no match must mean "sweep nothing", never "sweep everything".
+- eve templates carry **no tags**, so "current" can only be the most recently
+  *created* template — which is correct, because eve creates it during a build.
+- `Sandbox.list()`'s `namePrefix` is only valid together with `sortBy: "name"`;
+  passing it alone returns HTTP 400. One unfiltered listing split client-side
+  is simpler when a project holds a handful of sandboxes.
+
+[ps]: https://vercel.com/docs/sandbox/concepts/persistent-sandboxes
+
 ## Lifecycle 2: the harness template and its forks
 
 Provider configuration (in `dev-agent.ts`):

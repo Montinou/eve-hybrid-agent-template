@@ -130,6 +130,32 @@ Do not proceed to phase 3 until every box checks:
 - [ ] App installed on the probe repo (checked explicitly — silence is not evidence).
 - [ ] `pnpm test` passes, including the dispatch unit tests.
 - [ ] Probe PR event: delivery 200 in Recent Deliveries.
+## Turn policy: queue, don't steer
+
+`githubChannel` is configured with **`turnPolicy: "queue"`** and
+**`progress: { reactions: true }`**. Both are deliberate.
+
+Since eve 0.33 the channel default is `"steer"`: a message arriving during an
+active turn **cancels that turn** and starts a replacement, and *"completed
+side effects are not rolled back"*. For an agent whose turns hold an 8-vCPU
+sandbox for minutes, that is destructive — a push landing mid-run abandons a
+booted fork and throws away work already paid for. `"queue"` makes the active
+turn finish first.
+
+The 👀 reaction is the other half of the same problem. A command that boots a
+sandbox shows nothing on the PR for minutes; without an acknowledgement people
+assume it was ignored and post it again, and under `"queue"` that second
+command is not a no-op — it is a second expensive run, waiting its turn. eve
+adds the reaction as the turn begins, before any of that work starts. It is the
+default, but a channel with its own `onComment` replaces the default mention
+gate, so declare it rather than inherit it.
+
+**Scope:** sessions are per conversation — one durable session per PR, issue,
+or review thread. So `"queue"` serializes turns *within one thread only*; other
+PRs keep running concurrently. Within one PR, comment turns and PR-event turns
+share the session, which is exactly why the model resolver in `agent/agent.ts`
+is keyed on `turn.started` rather than `session.started`.
+
 - [ ] Probe `@bot` comment: `eyes` reaction + bot reply comment.
 - [ ] Untagged comment: no reaction, no session.
 

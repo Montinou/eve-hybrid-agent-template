@@ -1,0 +1,100 @@
+# Second external probe: is the agent's SANDBOX usable? (docs/07-ops.md)
+#
+# WHY THIS EXISTS, separately from health-check.yml
+#
+# `/eve/v1/health` answering 200 does not mean the agent can work. eve
+# provisions its own sandbox template only during a build; the template's
+# snapshot expires on a timer; and eve's in-process repair path is gated on
+# local development, so on a deployment the failure is rethrown. When that
+# snapshot lapses, every turn afterwards runs without a repo checkout — while
+# the health endpoint stays green. An agent built on this pattern ran 12 days
+# that way before anyone noticed, because the only visible symptom was tool
+# calls quietly degrading.
+#
+# The daily template-maintenance schedule now renews that template, but a
+# schedule that stops firing is exactly the failure this must catch. So this
+# asks the agent for its template state from OUTSIDE, an hour after the
+# schedule should have run, and alerts when the answer is missing or unhealthy.
+#
+# The warm it triggers is idempotent: after a good 07:00 pass the snapshot is
+# far from its renewal floor, so this second call skips the work.
+#
+# Configure on THIS repo (Settings → Secrets and variables → Actions):
+#   vars.EVE_HEALTH_URL     e.g. https://<deployment>/eve/v1/health
+#   vars.ALERT_EMAIL_FROM   verified Resend sender
+#   vars.ALERT_EMAIL_TO     recipient(s), comma-separated
+#   secrets.RESEND_API_KEY  Resend API key
+#   secrets.AGENT_API_KEY   the eve channel's API key (see agent/channels/eve.ts)
+name: Sandbox health
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Resolve agent base URL
+        id: base
+        run: |
+          if [ -z "$HEALTH_URL" ]; then
+            echo "::error::vars.EVE_HEALTH_URL is unset — cannot locate the agent."
+            exit 1
+          fi
+          echo "url=${HEALTH_URL%/eve/v1/health}" >> "$GITHUB_OUTPUT"
+        env:
+          HEALTH_URL: ${{ vars.EVE_HEALTH_URL }}
+
+      # The agent is asked to end its reply with one machine-readable line, so
+      # this job never parses prose. A missing line is treated exactly like an
+      # unhealthy one: "could not confirm" is not "fine".
+      - name: Ask the agent for its sandbox state
+        id: probe
+        run: |
+          if [ -z "$EVE_TOKEN" ]; then
+            echo "::error::secrets.AGENT_API_KEY is unset — the eve channel would answer 401."
+            exit 1
+          fi
+          set -o pipefail
+          node scripts/orchestrate.mjs "Call the warm_sandbox tool exactly once with no arguments. Then reply with NOTHING except a single line, exactly: EVE_TEMPLATE_STATUS=healthy if the tool's eve.healthy field was true, or EVE_TEMPLATE_STATUS=unhealthy followed by a space and the tool's eve.reason if it was false. Deliver no message to any channel." \
+            2>&1 | tee probe.log || true
+          if grep -q "EVE_TEMPLATE_STATUS=healthy" probe.log; then
+            echo "eve template healthy"
+            exit 0
+          fi
+          detail=$(grep -o "EVE_TEMPLATE_STATUS=unhealthy.*" probe.log | head -1)
+          if [ -z "$detail" ]; then
+            detail="the agent never reported EVE_TEMPLATE_STATUS (turn failed, timed out, or answered off-contract)"
+          fi
+          echo "detail=$detail" >> "$GITHUB_OUTPUT"
+          echo "::error::$detail"
+          exit 1
+        env:
+          EVE_AGENT_URL: ${{ steps.base.outputs.url }}
+          EVE_TOKEN: ${{ secrets.AGENT_API_KEY }}
+
+      - name: Alert via Resend
+        if: failure()
+        run: |
+          payload=$(jq -n \
+            --arg from "$ALERT_EMAIL_FROM" \
+            --arg to "$ALERT_EMAIL_TO" \
+            --arg detail "${DETAIL:-probe step failed before reporting}" \
+            --arg at "$(date -u +%FT%TZ)" \
+            '{from: $from, to: ($to | split(",")), subject: "[agent] eve sandbox template unhealthy", text: ("The eve sandbox template could not be confirmed healthy at " + $at + ".\n\n" + $detail + "\n\nConsequence while this holds: the GitHub-channel checkout is unavailable, so every turn runs without a repo checkout. Repair: the daily warm fires the EVE_DEPLOY_HOOK_URL rebuild automatically; if that env var is unset, redeploy the project by hand.")}')
+          curl -s -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$payload"
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
+          ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO }}
+          DETAIL: ${{ steps.probe.outputs.detail }}

@@ -283,7 +283,14 @@ mystery costs.
   `0 7 * * *` = 07:00 UTC).
 - Accept default expirations? `SANDBOX_IDLE_TIMEOUT_MS` 300000,
   `SANDBOX_SNAPSHOT_EXPIRATION_MS` 7d, `TEMPLATE_SNAPSHOT_EXPIRATION_MS` 7d
-  (the last one is the harness knob — distinct lifecycle).
+  (the last one is the harness knob — distinct lifecycle), and
+  `EVE_TEMPLATE_SNAPSHOT_EXPIRATION_MS` 30d for eve's own template.
+  **Never talk them into shortening `SANDBOX_SNAPSHOT_EXPIRATION_MS` to save
+  storage:** it governs eve's TEMPLATE too, and a short TTL turns a quiet week
+  into a silent outage (Hard constraint 13).
+- Deploy Hook URL for `EVE_DEPLOY_HOOK_URL` (Project → Settings → Git → Deploy
+  Hooks, production branch). Without it the agent cannot self-heal a lapsed
+  eve template — it just reports the problem and waits for a human.
 
 **Files to edit:**
 
@@ -293,6 +300,9 @@ mystery costs.
   body names the shipped tool (`warm_sandbox`) exactly.
 - `agent/lib/template-sweep.ts` — no edits; verify it is wired into the warm
   path and the schedule.
+- `agent/lib/eve-sandbox.ts` — no edits; verify `warm_sandbox` calls
+  `warmEveSandboxTemplate` and that `EVE_DEPLOY_HOOK_URL` is set. This module
+  covers the failure the health endpoint cannot see (Hard constraint 13).
 
 **Commands to run:**
 
@@ -306,9 +316,14 @@ Vercel sandbox/snapshot inventory.
 
 **Verification gate:** after one full `run_dev_task` run plus one maintenance
 pass, the inventory matches steady state — **1 harness template sandbox + ≤2
-template snapshots + eve's own channel snapshots + nothing else lingering.**
-Anything extra is a leak: identify which mechanism (retention, teardown patch,
-sweeps) missed it before proceeding.
+template snapshots + 1 eve template WITH A LIVE SNAPSHOT + nothing else
+lingering.** Anything extra is a leak: identify which mechanism (retention,
+teardown patch, sweeps) missed it. An eve template with **zero** live snapshots
+is not a leak but an outage in waiting — the next turn will have no checkout,
+and nothing will say so.
+
+Confirm the maintenance run reported `eve.healthy: true`, not just that it
+finished.
 
 ---
 
@@ -350,19 +365,21 @@ statuses. **The agent is not "done" until a full probe PR passed.**
 
 ---
 
-## Hard constraints (the 12 gotchas — each cost a real debugging session)
+## Hard constraints (each one cost a real debugging session)
 
 1. **The eve loop cannot use subscription auth.** Loop models are Gateway
    strings or AI SDK `LanguageModel` only; the Claude subscription token works
    ONLY inside the harness tool (Claude Code runs entirely in the sandbox).
    Do not re-litigate this.
-   **AND the harness must receive the token EXPLICITLY:**
-   `createClaudeCode({ auth: { anthropic: { authToken: process.env.ANTHROPIC_AUTH_TOKEN } } })`.
-   Since `@ai-sdk/harness-claude-code` ≥1.0.42 (precedence re-verified
-   unchanged at 1.0.65), env gateway credentials
-   (automatic OIDC on Vercel) outrank `ANTHROPIC_AUTH_TOKEN` when no auth
-   block is passed, and the nested agent silently bills Opus through the AI
-   Gateway at API prices (real US$7.79/week leak, caught 2026-07-27).
+   **AND the harness must be told which credential to use:** pin
+   `auth: "direct"` on `createClaudeCode`. Left at its `"auto"` default, env
+   gateway credentials (automatic OIDC on Vercel) outrank
+   `ANTHROPIC_AUTH_TOKEN`, and the nested agent silently bills Opus through
+   the AI Gateway at API prices (real US$7.79/week leak, caught 2026-07-27).
+   The object form (`{ anthropic: { authToken } }`) resolves identically but
+   is deprecated — and is silently ignored by versions predating it.
+   Precedence re-verified at 1.0.42, 1.0.65 and 1.0.88; keep
+   `harness-auth-contract.test.ts` so the next bump has to re-verify too.
    Detection: `anthropic/claude-*` rows attributed to the project in the AI
    Gateway dashboard — subscription traffic never appears there.
 2. **Never bare `eve build`.** The bundler inlines the claude-code bridge's
@@ -401,6 +418,28 @@ statuses. **The agent is not "done" until a full probe PR passed.**
 12. **GitHub App installation is per-repo and silent.** Adding a repo to the
     estate requires installing the App on it first, via the GitHub UI —
     otherwise webhooks simply never arrive.
+
+13. **eve's own sandbox template dies silently, and only a build can revive
+    it.** eve provisions it during a build; its snapshot expires on a timer;
+    and eve's in-process repair is gated on local development, so on a
+    deployment the failure is rethrown forever. `/eve/v1/health` keeps
+    answering 200 the whole time while every turn runs without a repo
+    checkout. Renew it on a schedule, fire a Deploy Hook when it is already
+    gone, sweep dead session records (they pin a session to a sandbox that
+    cannot resume), and probe it externally. `stop()` alone does NOT give a
+    template a fresh TTL — only `snapshot({expiration})` +
+    `update({currentSnapshotId})` does.
+14. **Channels steer by default; queue instead.** Since eve 0.33 a message
+    arriving mid-turn CANCELS that turn, and completed side effects are not
+    rolled back — a push landing during a long run abandons a booted sandbox.
+    Set `turnPolicy: "queue"` and keep `progress: { reactions: true }` so the
+    👀 acknowledgement stops people from re-posting a command that is already
+    running.
+15. **Validate dependency bumps against a protected preview, never straight to
+    main.** Anything that changes `BOOTSTRAP_HASH` forces a template rebuild,
+    and the rebuild is the only thing that exercises cloning the estate and
+    installing its dependencies — the part unit tests cannot reach. Use
+    `EVE_BYPASS_TOKEN` with `scripts/orchestrate.mjs`.
 
 ## Definition of done
 

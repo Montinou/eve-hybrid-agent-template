@@ -3,8 +3,13 @@ import { commandModelId, orchestratorModelId } from "#lib/model.ts";
 
 export default defineAgent({
   // Per-turn dynamic model (see node_modules/eve/docs/agent-config.md,
-  // §"Choose the model dynamically"): `fallback` is the compiled static model
-  // and anchors build-time metadata (routing, credentials, context window).
+  // §"Choose the model dynamically").
+  //
+  // The handler MUST return a concrete model on every turn. eve 0.33 removed
+  // `fallback` and made a missing/invalid selection fail the turn before any
+  // model-dependent work begins — so returning null, which used to mean "use
+  // the fallback", now breaks every turn that takes that branch. Name the
+  // default explicitly instead.
   //
   // The resolver is keyed on `turn.started` (once per turn) — NOT
   // `session.started` (once per session) — because one durable session can
@@ -26,16 +31,15 @@ export default defineAgent({
   // dispatches a command turn, and this resolver just reads it back.
   // Deterministic code decides; the model executes.
   model: defineDynamic({
-    fallback: orchestratorModelId,
     events: {
       // CUSTOMIZE: `command` must match the attribute name your dispatch
       // handler sets in agent/lib/dispatch.ts (docs/04-orchestrator.md).
       // Add more attribute checks here if you introduce additional turn
-      // kinds at different price points. Returning null → fallback.
+      // kinds at different price points — every branch must return a model.
       "turn.started": (_event, ctx) =>
         typeof ctx.session.auth.current?.attributes.command === "string"
           ? commandModelId
-          : null,
+          : orchestratorModelId,
     },
   }),
   // CUSTOMIZE: add `outputSchema` (a zod schema) if your agent has task-mode
