@@ -53,7 +53,7 @@ pnpm typecheck
 pnpm test
 ```
 
-Both must pass on a fresh clone — if they don't, stop and fix your environment before blaming the code. `pnpm test` includes a docs-accuracy test that checks the scripts, paths, versions and environment variables the docs name. The evals are separate: `pnpm eval --list` shows them without running anything, and running them needs a decision described in [docs/10-evals.md](10-evals.md).
+Both must pass on a fresh clone — if they don't, stop and fix your environment before blaming the code. `pnpm test` includes a docs-accuracy test that checks the scripts, paths and versions the docs name, and the environment variable names they use (names with at least one underscore): a whole inline code span (`NAME` or `NAME=value`) and, inside code (fenced blocks and inline spans), a `NAME=` assignment (including `export NAME=`), `vercel env add|rm|update NAME`, `process.env.NAME` / `process.env["NAME"]`, or `$NAME` / `${NAME}`. Each name must appear in `.env.example`, in the non-test code under `agent/`, `scripts/`, `.github/` or `evals/`, or in the test's short allow-list of external names; bare names in prose or diagrams are not checked. The evals are separate: `pnpm eval --list` shows them without running anything, and running them needs a decision described in [docs/10-evals.md](10-evals.md).
 
 For local model calls the loop needs Gateway auth (see [docs/01-prerequisites.md](01-prerequisites.md) §3). Copy [`.env.example`](../.env.example) to `.env.local` and set either `AI_GATEWAY_API_KEY`, or link the project first (step 5) and run `vercel env pull`. Then:
 

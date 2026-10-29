@@ -39,10 +39,14 @@ Never invent eve APIs. Every `defineAgent` / `defineTool` / `defineSandbox` /
 - Verify your work: `pnpm typecheck && pnpm test` after every change. The
   tests include `agent/lib/docs-accuracy.test.ts`, which fails when a doc names
   a script, path or version that does not match the repo, or an environment
-  variable (as an inline code span, a `NAME=` assignment, `vercel env add`,
-  `process.env`, `export` or a `$NAME` reference) that is in neither
-  `.env.example` nor the non-test code: change the doc in the same commit as
-  the thing it describes.
+  variable name (one with at least one underscore) that is in none of
+  `.env.example`, the non-test code under `agent/`, `scripts/`, `.github/` and
+  `evals/`, or the test's short allow-list of external names. It reads names
+  written as a whole inline code span (`NAME` or `NAME=value`) and, inside
+  code (fenced blocks and inline spans), as a `NAME=` assignment (including
+  `export NAME=`), `vercel env add|rm|update NAME`, `process.env.NAME` /
+  `process.env["NAME"]`, or `$NAME` / `${NAME}`; bare names in prose are not
+  checked. Change the doc in the same commit as the thing it describes.
 - Customization points in code are marked with `// CUSTOMIZE:` comments that
   point to the relevant `docs/NN-*.md` page. Edit at those markers; do not
   rewrite the load-bearing plumbing around them.

@@ -242,6 +242,10 @@ describe("docs accuracy helpers", () => {
     expect(wrongVersions(`eve ${installed("eve")} and \`ai@${installed("ai")}\``)).toEqual([]);
     expect(wrongVersions("(`ai: ^7.0.1`)")).toHaveLength(1);
     expect(overridden("ai")).toBe("^7.0.157"); // the pnpm-workspace.yaml entry the `ai:` form describes
+    // The override must move with the dependency: a Dependabot bump of `ai` in
+    // package.json alone fails here until pnpm-workspace.yaml is bumped too
+    // (the manual step docs/07-ops.md "Staying current" describes).
+    expect(overridden("ai")).toBe(declared("ai"));
     expect(wrongVersions("`eve@^0.1.0`")).toHaveLength(1);
     expect(wrongVersions("run pnpm 12.17 here")).toHaveLength(1);
   });
