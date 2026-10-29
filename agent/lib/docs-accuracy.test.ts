@@ -107,6 +107,121 @@ const PNPM_BUILT_INS = new Set([
   "why",
 ]);
 
+// The installed version of a dependency, falling back to the declared one.
+function installed(name: string): string {
+  const manifest = join(ROOT, "node_modules", name, "package.json");
+  if (existsSync(manifest)) {
+    return (JSON.parse(readFileSync(manifest, "utf8")) as { version: string }).version;
+  }
+  return declared(name).replace(/^[\^~]/, "");
+}
+
+function declared(name: string): string {
+  const deps = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+    dependencies: Record<string, string>;
+  };
+  return deps.dependencies[name] ?? "";
+}
+
+// Versions a doc names for eve, ai, @ai-sdk packages and pnpm that differ from
+// the repo. Accepts `name 1.2.3`, `name@1.2.3`, `name: ^1.2.3` and `name@~1.2.3`
+// (a range is compared with the range package.json declares, an exact version
+// with the installed one), and pnpm with a two-part version (`pnpm 12.17`).
+function wrongVersions(source: string): string[] {
+  const wrong: string[] = [];
+  for (const match of source.matchAll(
+    /(?<![\w@/.-])(eve|ai|@ai-sdk\/[\w-]+)`?(?:@|:\s*| )([\^~]?)v?(\d+\.\d+\.\d+)(?![\w-]|\.\w)/g,
+  )) {
+    const [, name, range, version] = match;
+    const expected = range && declared(name) ? declared(name) : installed(name);
+    const named = `${range}${version}`;
+    if (named !== expected && !(range === "" && version === installed(name))) {
+      wrong.push(`${name} ${named} (expected ${expected})`);
+    }
+  }
+  const manager = pkg.packageManager.replace(/^pnpm@/, "");
+  for (const match of source.matchAll(/\bpnpm[@ ]v?(\d+(?:\.\d+){0,2})(?![\w-]|\.\w)/g)) {
+    const named = match[1];
+    if (named !== manager && !manager.startsWith(`${named}.`)) {
+      wrong.push(`pnpm ${named} (packageManager ${manager})`);
+    }
+  }
+  return wrong;
+}
+
+// Environment-variable names the docs may mention that this repo neither lists
+// in .env.example nor reads in agent/, scripts/, .github/ or evals/. One reason
+// per entry; anything else a doc names must exist in the repo.
+const EXTERNAL_ENV_NAMES = new Map<string, string>([
+  ["ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION", "pnpm's error code, quoted from its install failure"],
+  ["BLOB_READ_WRITE_TOKEN", "injected by Vercel when a Blob store is added (docs/08-extensions.md)"],
+  ["EVE_EVAL_AUTH_TOKEN", "read by `eve eval --url`, not by this repo (node_modules/eve/docs/evals/targets.mdx)"],
+  ["AGENT_WRITE_REPOS", "read by the example code a reader adds for a write-capable capability (docs/05-dev-agent.md)"],
+]);
+
+const ENV_NAME = "[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+";
+
+// Names a Markdown doc presents as an environment variable: a whole inline
+// code span (`NAME` or `NAME=value`) or a `NAME=value` line in a fenced block.
+function envNamesIn(source: string): string[] {
+  const names: string[] = [];
+  const withoutFences = source.replace(/^[ \t]*```[^\n]*\n([\s\S]*?)^[ \t]*```/gm, (_m, body) => {
+    for (const line of (body as string).split("\n")) {
+      const found = line.match(new RegExp(`^\\s*(?:\\w+=\\S+\\s+)*(${ENV_NAME})=`));
+      if (found) names.push(found[1]);
+    }
+    return "";
+  });
+  for (const match of withoutFences.matchAll(new RegExp(`\`(${ENV_NAME})(?:=[^\`\\n]*)?\``, "g"))) {
+    names.push(match[1]);
+  }
+  return names;
+}
+
+function unknownEnvNames(source: string, known: ReadonlySet<string>): string[] {
+  return [...new Set(envNamesIn(source))].filter(
+    (name) => !known.has(name) && !EXTERNAL_ENV_NAMES.has(name),
+  );
+}
+
+// Every env-like name that appears in .env.example or in the code and CI
+// configuration (this test file is excluded: it holds the allow-list).
+function knownEnvNames(): Set<string> {
+  const sources = [
+    join(ROOT, ".env.example"),
+    ...["agent", "scripts", ".github", "evals"].flatMap((dir) => listFiles(join(ROOT, dir))),
+  ].filter((file) => file !== SELF);
+  const names = new Set<string>();
+  for (const file of sources) {
+    for (const match of readFileSync(file, "utf8").matchAll(new RegExp(`\\b${ENV_NAME}\\b`, "g"))) {
+      names.add(match[0]);
+    }
+  }
+  return names;
+}
+
+describe("docs accuracy helpers", () => {
+  it("version check matches the range form in docs/07-ops.md and rejects a wrong one", () => {
+    const ops = text.get(join(ROOT, "docs/07-ops.md")) ?? "";
+    expect(ops).toMatch(/`ai: \^7\.0\.157`/); // the form the check must be able to see
+    expect(wrongVersions("(`ai: ^7.0.157`)")).toEqual([]);
+    expect(wrongVersions(`eve ${installed("eve")} and \`ai@${installed("ai")}\``)).toEqual([]);
+    expect(wrongVersions("(`ai: ^7.0.1`)")).toHaveLength(1);
+    expect(wrongVersions("`eve@^0.1.0`")).toHaveLength(1);
+    expect(wrongVersions("run pnpm 12.17 here")).toHaveLength(1);
+  });
+
+  it("env-var check flags an unknown name and accepts a known one", () => {
+    const known = new Set(["EVE_BYPASS_TOKEN"]);
+    expect(unknownEnvNames("set `EVE_BYPAS_TOKEN`", known)).toEqual(["EVE_BYPAS_TOKEN"]);
+    expect(unknownEnvNames("set `EVE_BYPASS_TOKEN`", known)).toEqual([]);
+    expect(unknownEnvNames("```sh\nEVE_BYPAS_TOKEN=x pnpm eval\n```", known)).toEqual([
+      "EVE_BYPAS_TOKEN",
+    ]);
+    expect(unknownEnvNames("the `ENOENT` error and `pnpm test`", known)).toEqual([]);
+  });
+});
+
 describe("docs accuracy", () => {
   it("every pnpm script named in the docs exists in package.json", () => {
     const missing: string[] = [];
@@ -147,36 +262,24 @@ describe("docs accuracy", () => {
   });
 
   it("no doc names a version of eve, ai, @ai-sdk packages or pnpm different from package.json", () => {
-    const installed = (name: string): string => {
-      const manifest = join(ROOT, "node_modules", name, "package.json");
-      if (existsSync(manifest)) {
-        return (JSON.parse(readFileSync(manifest, "utf8")) as { version: string }).version;
-      }
-      const deps = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
-        dependencies: Record<string, string>;
-      };
-      return deps.dependencies[name].replace(/^[\^~]/, "");
-    };
     const wrong: string[] = [];
     for (const file of DOC_FILES) {
-      const source = text.get(file) ?? "";
-      for (const match of source.matchAll(
-        /(?<![\w@/.-])(eve|ai|@ai-sdk\/[\w-]+)`?(?:@| )v?(\d+\.\d+\.\d+)(?![\w.-])/g,
-      )) {
-        const [, name, version] = match;
-        if (version !== installed(name)) {
-          wrong.push(`${rel(file)}: ${name} ${version} (installed ${installed(name)})`);
-        }
-      }
-      const manager = pkg.packageManager.replace(/^pnpm@/, "");
-      for (const match of source.matchAll(/\bpnpm[@ ](\d+(?:\.\d+\.\d+)?)(?![\w.-])/g)) {
-        const named = match[1];
-        if (named !== manager && !manager.startsWith(`${named}.`)) {
-          wrong.push(`${rel(file)}: pnpm ${named} (packageManager ${manager})`);
-        }
-      }
+      for (const message of wrongVersions(text.get(file) ?? "")) wrong.push(`${rel(file)}: ${message}`);
     }
     expect(wrong).toEqual([]);
+  });
+
+  it("every environment variable a doc names exists in .env.example, the code or the allow-list", () => {
+    const known = knownEnvNames();
+    expect(known.has("EVE_BYPASS_TOKEN")).toBe(true); // the check sees scripts/
+    expect(known.has("GITHUB_APP_ID")).toBe(true); // and .env.example
+    const unknown: string[] = [];
+    for (const file of DOC_FILES.filter((f) => f.endsWith(".md"))) {
+      for (const name of unknownEnvNames(text.get(file) ?? "", known)) {
+        unknown.push(`${rel(file)}: ${name}`);
+      }
+    }
+    expect(unknown).toEqual([]);
   });
 
   it("every environment variable named in .env.example is read under agent/ or documented in docs/01-prerequisites.md", () => {

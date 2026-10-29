@@ -181,7 +181,7 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 
 The agent is DONE when all of the following hold simultaneously:
 
-1. **Green pipeline:** CI (typecheck, tests, hash gate) passes; deploy goes
+1. **Green pipeline:** CI (typecheck, tests, a build with no deprecation notice, hash gate) passes; deploy goes
    through `pnpm build`; health endpoint returns 200 from the external probe.
 2. **E2E proof:** one probe PR exercised every capability through the real
    GitHub channel and produced a PR comment matching the output contract, with
