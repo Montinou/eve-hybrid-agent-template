@@ -75,20 +75,13 @@ automatically when linked).
 
 ## Evals
 
-The template ships a minimal harness — [`evals/evals.config.ts`](../evals/evals.config.ts)
-and one routing eval ([`evals/routing.eval.ts`](../evals/routing.eval.ts)) — for
-behavior you cannot unit-test: does the orchestrator pick the right tool for a
-command turn, does it respect the security boundary, does it degrade honestly when
-context is missing.
+The template ships a small, deterministic eval suite (`evals/`: a delegation eval
+and two routing evals, all tagged `fast`) for behavior unit tests cannot reach:
+tool routing, delegation and the security boundary. `pnpm eval` runs it, and
+grows from incidents rather than guesses.
 
-- API: `node_modules/eve/docs/evals/` (`overview.mdx`, `cases.mdx`,
-  `assertions.mdx`, `judge.mdx`, `running.mdx`).
-- Grow the suite from *incidents*: every time the deployed agent mis-routes or
-  violates its contract, add the failing transcript as a case before fixing the
-  prompt — evals are the regression suite for `agent/instructions.md`, exactly as
-  vitest is for `lib/`.
-- Evals call real models and cost money; keep them out of the per-PR CI path and
-  run them on prompt changes.
+Credentials, the stub pattern, the `allowToolStubs` prerequisite, the `fast`/`live`
+tags and CI placement are in [docs/10-evals.md](10-evals.md).
 
 ## Email alerts and reports (Resend)
 
@@ -136,8 +129,9 @@ Each extension carries its own check:
 - **Journal:** trigger a capability twice, confirm exactly one journal record per
   logical run (idempotent key) in the Blob store; `recall` returns it; a probe
   with Blob credentials removed still completes the turn (append fails soft).
-- **Evals:** `pnpm exec eve eval` (see `node_modules/eve/docs/evals/running.mdx`)
-  passes on the shipped routing eval.
+- **Evals:** `pnpm eval --list` shows the suite (delegation, routing/0000,
+  routing/0001); once the owner has permitted tool stubs for the eval runner,
+  `pnpm eval` passes ([docs/10-evals.md](10-evals.md)).
 - **Email:** send a test digest to yourself; confirm a bogus `RESEND_API_KEY`
   produces a `partial`/noted result, not a failed turn.
 
