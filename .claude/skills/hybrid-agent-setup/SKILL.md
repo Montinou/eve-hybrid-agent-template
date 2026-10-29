@@ -84,6 +84,13 @@ vercel deploy --prod          # or your team's deploy flow; builds take ~100s
 curl -sf https://{{VERCEL_PROJECT}}.vercel.app/eve/v1/health
 ```
 
+If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, the
+lockfile holds a release published under 24 h ago and pnpm 12's
+`minimumReleaseAge` (built-in default 1440 minutes) blocks it. It is a
+supply-chain control: wait until the release is a day old and re-run. Never
+add a `minimumReleaseAgeExclude` list or lower the setting (docs/07-ops.md,
+"Staying current").
+
 **Verification gate:** `GET /eve/v1/health` on the deployed URL returns 200
 (this route is always public — it skips route auth), and
 `pnpm typecheck && pnpm test` pass locally. **Do not proceed until the
@@ -317,8 +324,10 @@ Vercel sandbox/snapshot inventory.
 
 **Verification gate:** after one full `run_dev_task` run plus one maintenance
 pass, the inventory matches steady state — **1 harness template sandbox + 1
-template snapshot + zero fork snapshots + nothing else lingering.** Anything
-extra is a leak: identify which mechanism (non-persistent forks, explicit fork
+template snapshot + zero fork snapshots, plus eve's own build-time template
+snapshot and per-session sandboxes and snapshots (eve-managed, healthy; see
+docs/06-sandbox-lifecycle.md), nothing else lingering.** Anything beyond that is
+a leak: identify which mechanism (non-persistent forks, explicit fork
 destroy, sweeps) missed it.
 
 Confirm the maintenance run reported `warmed: true`, not just that it
@@ -464,7 +473,8 @@ Do not declare setup complete until every box checks:
       structured `ok` result through the real channel.
 - [ ] Sandbox/snapshot inventory at steady state after a run + maintenance
       pass (1 harness template sandbox + 1 template snapshot + zero fork
-      snapshots + nothing else).
+      snapshots; eve's own build-time template snapshot and per-session
+      sandboxes and snapshots are eve-managed and healthy; nothing else).
 - [ ] Daily maintenance schedule live with the intended cron.
 - [ ] External health-check workflow green with alert email configured in
       Actions secrets.

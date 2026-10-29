@@ -137,8 +137,10 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 - [ ] `RECIPE_VERSION` set; bumped after any recipe edit you made in phase 4
 - [ ] **Gate:** double-warm is a fast no-op; 30 min after a real run the
       sandbox/snapshot inventory matches the steady state
-      (1 harness template sandbox + 1 template snapshot + zero fork snapshots +
-      nothing lingering)
+      (1 harness template sandbox + 1 template snapshot + zero fork snapshots;
+      eve's own build-time template snapshot and per-session sandboxes and
+      snapshots are eve-managed and healthy, docs/06-sandbox-lifecycle.md;
+      nothing else lingering)
 
 ## Phase 6 — Ops ([docs/07-ops.md](07-ops.md))
 

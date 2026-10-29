@@ -135,7 +135,9 @@ All three must pass, and `pnpm build 2>&1 | grep -i deprecat` must print
 nothing: CI fails on any deprecation notice in the build output, so a
 deprecated API is fixed in the bump that introduces the warning. A weekly
 Dependabot PR proposes these bumps (see [`docs/07-ops.md`](docs/07-ops.md),
-"Staying current").
+"Staying current"). pnpm 12 will not install a version published less than 24 h
+ago (`minimumReleaseAge`): if `pnpm install --frozen-lockfile` fails with
+`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, wait and re-run; do not bypass it.
 
 ## Docs index
 
