@@ -16,24 +16,21 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/harness": "^1.0.85",
-    "@ai-sdk/harness-claude-code": "^1.0.88",
-    "@ai-sdk/sandbox-vercel": "^1.0.85",
-    "@vercel/sandbox": "^3.1.0",
-    "ai": "^7.0.77",
-    "eve": "^0.44.3",
-    "zod": "4.4.3"
+    "@ai-sdk/harness": "^1.0.168",
+    "@ai-sdk/harness-claude-code": "^1.0.172",
+    "@ai-sdk/sandbox-vercel": "^1.0.168",
+    "@vercel/sandbox": "^3.9.1",
+    "ai": "^7.0.157",
+    "eve": "^0.89.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "24.x",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
-  },
-  "resolutions": {
-    "ai": "^7.0.77"
+    "vitest": "^5.0.5"
   },
   "engines": {
     "node": "24.x"
   },
-  "packageManager": "pnpm@10.0.0"
+  "packageManager": "pnpm@12.16.1"
 }

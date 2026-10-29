@@ -14,7 +14,9 @@ cd {{AGENT_NAME}}
 pnpm install
 ```
 
-pnpm is not optional here: [`package.json`](../package.json) pins `resolutions` for the `ai` package that the harness stack depends on, and the lockfile encodes a version set (`eve` + `ai` + `@ai-sdk/harness*` + `@vercel/sandbox`) that is known to work together. Don't regenerate it with another package manager.
+pnpm is not optional here: [`pnpm-workspace.yaml`](../pnpm-workspace.yaml) pins `overrides` for the `ai` package that the harness stack depends on (pnpm 12 ignores `resolutions` in `package.json`), and the lockfile encodes a version set (`eve` + `ai` + `@ai-sdk/harness*` + `@vercel/sandbox`) that is known to work together. Don't regenerate it with another package manager.
+
+`pnpm-workspace.yaml` holds the pnpm settings that live outside `package.json`: `allowBuilds: { esbuild: false }` (pnpm 12 fails the install on any dependency build script that is not approved, and esbuild's is not needed) and the `ai` override above.
 
 ## 2. Orient yourself in the tree
 
