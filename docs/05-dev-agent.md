@@ -15,20 +15,24 @@ template/fork lifecycle described here has cost consequences handled there.
 
 ```ts
 const agent = new HarnessAgent({
-  harness: createClaudeCode({
-    auth: { anthropic: { authToken: process.env.ANTHROPIC_AUTH_TOKEN } },
-    ...(process.env.DEV_AGENT_MODEL ? { model: process.env.DEV_AGENT_MODEL } : {}),
-    thinking: { type: "adaptive" },
-    maxTurns: 200,
-  }),
+  harness: createClaudeCode(buildHarnessOptions(process.env)),
+  // = { auth: "direct", thinking: { type: "adaptive" }, maxTurns: 200,
+  //     model?: DEV_AGENT_MODEL } — see "Auth" below
   id: "hybrid-dev-agent",                      // CUSTOMIZE: your agent's id
   instructions: buildInstructions(mode, budgetMs, target, branch),
   tools: { report_result: reportResultTool },  // host tool, proxied via internal MCP
   permissionMode: "allow-all",
-  sandbox: makeSandboxProvider(),              // createVercelSandbox(...)
   sandboxConfig: makeSandboxConfig(state, { repo: target, branch }, sessionSecrets),
 });
-const session = await agent.createSession({ sessionId, abortSignal: budgetSignal });
+// The fork: template snapshot (built once per identity) → non-persistent live
+// sandbox, owned by this module and destroyed after the run.
+const sandboxSession = await createVercelNetworkSandboxSession({
+  ...buildDevSandboxCreateOptions(),
+  template: await agent.getSandboxTemplate(),
+  sandboxId: devForkSandboxId(sessionId),
+  abortSignal: budgetSignal,
+});
+const session = await agent.createSession({ sessionId, sandboxSession, abortSignal: budgetSignal });
 const result = await agent.generate({ session, prompt, abortSignal: budgetSignal });
 ```
 
@@ -42,7 +46,7 @@ that costs money while every test stays green:
 | `auth` | What `resolveClaudeCodeEnv` does | Who pays |
 |---|---|---|
 | omitted (`"auto"`, the default) | prefers **AI Gateway** credentials whenever they exist — and on Vercel the OIDC token always exists | your Gateway account, at API prices |
-| `"direct"` | normalizes to `{ anthropic: {} }` → reads `ANTHROPIC_AUTH_TOKEN` | the Claude subscription |
+| `"direct"` | takes the Anthropic branch before any Gateway lookup → reads `ANTHROPIC_AUTH_TOKEN` | the Claude subscription |
 | `"ai-gateway"` | Gateway only | Gateway |
 
 This exact leak burned **US$7.79 of Opus in one week** (2026-07-27) before it
@@ -53,10 +57,14 @@ fails, and the only symptom is the invoice.
 the AI Gateway dashboard after a dev-agent run mean the leak is back —
 subscription traffic never appears there at all.
 
-Precedence re-verified by reading `resolveClaudeCodeEnv` at 1.0.42, 1.0.65 and
-1.0.88. The object form (`{ anthropic: { authToken } }`) resolves identically
-but is deprecated, and is silently *ignored* by versions that predate it —
-which is its own trap. That is why
+Precedence re-verified by reading `resolveClaudeCodeEnv` at 1.0.42, 1.0.65,
+1.0.88 and 1.0.172. Since 1.0.172 the real token also stays on the host: the
+sandbox gets a placeholder credential and the host swaps the real
+`Authorization` bearer in at egress, only for requests to the Anthropic API
+(`src/claude-code-auth.ts` and `src/claude-code-subscription.ts` in the
+package). The old nested object form (`{ anthropic: { authToken } }`) was
+deprecated by 1.0.88 and is rejected by 1.0.172, where an object `auth` must be
+a flat string record that replaces the process env. Keep the mode string. That is why
 [`agent/lib/harness-auth-contract.test.ts`](../agent/lib/harness-auth-contract.test.ts)
 pins the harness version whose resolution was actually read and fails CI on any
 bump: re-reading the resolver costs two minutes, finding this on a bill costs
@@ -69,7 +77,6 @@ explicit mode, re-routing billing just as quietly.
 
 The lib still *guards* the token's presence and fails loudly (with a
 structured `failed` result, see below) when it's missing. This is the only
-place in the whole system where the subscription token does anything.
 place in the whole system where the subscription token does anything.
 
 ## Time budget discipline
@@ -96,10 +103,11 @@ maximum (~800s on Pro, 300s on Hobby). The consequences shape everything:
 
 ## Template → fork lifecycle
 
-The sandbox provider config has two hooks with sharply different lifetimes:
+The sandbox config has two hooks with sharply different lifetimes:
 
-- **`onBootstrap`** — runs once per *template identity*, then the provider
-  snapshots the filesystem. Everything expensive and repo-generic goes here:
+- **`onBootstrap`** — runs once per *template identity* (inside the template
+  that `createVercelNetworkSandboxSession` builds from
+  `agent.getSandboxTemplate()`), then the template's filesystem is snapshotted. Everything expensive and repo-generic goes here:
   install prerequisites, write git credentials, shallow-clone the whole enabled
   estate (`--depth 50`), run each repo's dependency install, then **delete the
   credentials** (`rm -f ~/.git-credentials`) — the snapshot is reusable and
@@ -315,7 +323,7 @@ next reader will trust it, and the gap is exactly what they would have checked.
   lookups) are all unit-tested without any deploy.
 - Deploy (`pnpm build` first — never bare `eve build`, see
   [docs/07-ops.md](07-ops.md)), call `warm_sandbox` once via a probe comment or the
-  eve dev UI, confirm it returns `{ ready: true }`.
+  eve dev UI, confirm it returns `{ warmed: true, seconds, detail }`.
 - Run a real `run_dev_task` probe on a PR of an enabled estate repo. Confirm the
   PR comment carries a structured section with an honest status, and that a
   deliberately-broken run (e.g. point it at a disabled repo) yields a structured

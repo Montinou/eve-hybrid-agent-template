@@ -4,7 +4,7 @@ import type { ToolContext } from "eve/tools";
  * Test-only adapter that narrows a tool's declared return type back to the
  * value our tools actually produce.
  *
- * Since eve 0.44 `defineTool`'s execute may return `TOutput`, a promise of it,
+ * `defineTool`'s execute (`ToolExecuteFn` in eve's `tools/definition.d.ts`) may return `TOutput`, a promise of it,
  * OR an `AsyncIterable<TOutput>` (streaming/incremental results), so the type
  * a caller sees is that whole union and every property access on it is a type
  * error. Tools in this pattern return a single settled object — the capability

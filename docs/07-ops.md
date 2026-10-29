@@ -47,13 +47,30 @@ After changing envs, **redeploy** — env changes don't apply to running deploym
 1. `pnpm typecheck` — `lib/` is pure TypeScript, so most of the system is
    verifiable without a deploy.
 2. `pnpm test` — the vitest suite (dispatch, model resolution, budget clamp,
-   estate, sandbox-config guards, prompt builders, secret-command execution).
-3. **Instructions-hash drift gate** — `node scripts/hash-instructions.mjs --check`
+   estate, sandbox-config guards, prompt builders, secret-command execution),
+   including `agent/lib/removed-apis.test.ts`, which fails on any use of an API
+   eve's pre-1.0 cleanup removed, and `agent/lib/docs-accuracy.test.ts`, which
+   fails when a doc names a script, path or version that does not match the
+   repo, or an environment variable name (one with at least one underscore)
+   that is in none of `.env.example`, the non-test code under `agent/`,
+   `scripts/`, `.github/` and `evals/`, or the test's short allow-list of
+   external names. It reads names written as a whole inline code span (`NAME`
+   or `NAME=value`) and, inside code (fenced blocks and inline spans), as a
+   `NAME=` assignment (including `export NAME=`),
+   `vercel env add|rm|update NAME`, `process.env.NAME` /
+   `process.env["NAME"]`, or `$NAME` / `${NAME}`; bare names in prose are not
+   checked.
+3. `pnpm build` — must succeed **and print no deprecation notice**. The CI step
+   captures the build output and fails when `grep -i deprecat` matches it.
+4. **Instructions-hash drift gate** — `node scripts/hash-instructions.mjs --check`
    fails when [`agent/instructions.md`](../agent/instructions.md) and its committed
    hash ([`agent/lib/instructions-hash.ts`](../agent/lib/instructions-hash.ts)) are
    out of sync. This catches the classic failure of editing the prompt (or its
    generated snapshot) in one place only. If you edit the prompt, re-run
    `pnpm hash-instructions` and commit both files.
+
+Evals are not a CI gate: they run against a live model and cost money, so run
+them on demand (`pnpm eval`, [docs/10-evals.md](10-evals.md)).
 
 The deploy itself is `pnpm build && vercel deploy --prod` — **never bare
 `eve build`**: the bundler inlines the claude-code bridge's code but not its data
@@ -62,6 +79,59 @@ files, so an unpatched bundle fails every dev-agent call with ENOENT at runtime
 trees and patches the server function's `maxDuration` to 800 in the same pass. The
 `build` script in `package.json` already chains it; CI and any deploy pipeline must
 go through that script.
+
+## Staying current
+
+eve is pre-1.0 and ships breaking changes, so a template that is not updated
+stops building. Four things keep it current:
+
+- **A weekly update PR.** [.github/dependabot.yml](../.github/dependabot.yml)
+  opens one grouped PR per week for npm (one group holds every dependency, so
+  eve, `ai`, `@ai-sdk/*` and `@vercel/*` always move together) and one for
+  GitHub Actions.
+- **One rule on that PR:** run `pnpm typecheck`, `pnpm test` and `pnpm build`,
+  and merge only when all three pass with no deprecation output (CI enforces
+  the same). When the PR bumps eve, read the migration notes in
+  `node_modules/eve/docs/guides/` for the new version before fixing failures.
+- **One manual step Dependabot does not do:** `pnpm-workspace.yaml` pins the
+  `ai` package under `overrides` (`ai: ^7.0.157`), next to the `ai` dependency
+  in `package.json`. When the PR changes the `ai` range, change the override to
+  the same range in the same PR; otherwise the override keeps forcing the old
+  range on every package that depends on `ai`. Dependabot edits `package.json`
+  and the lockfile only.
+- **The pnpm release-age hold.** pnpm 12 refuses to install a package version
+  published less than 24 hours ago: the setting is `minimumReleaseAge`, its
+  built-in default is 1440 minutes (pnpm 12.16.1's changelog; `pnpm config get`
+  prints nothing for a built-in default), and it is checked against the
+  lockfile too. `pnpm install --frozen-lockfile` then fails with
+  `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` and names the offending versions.
+  It is a supply-chain control (a freshly published release gets a day to be
+  noticed and pulled if it is malicious or broken). Never bypass it: no
+  `minimumReleaseAgeExclude` list, no lowered `minimumReleaseAge` in
+  `pnpm-workspace.yaml`, no command-line override, and nothing committed to get
+  around it. Wait until the release is 24 hours old, then re-run CI; never merge
+  a red PR around it. The weekly Dependabot PR hits this
+  whenever it picks up a release from the last day, so
+  [.github/dependabot.yml](../.github/dependabot.yml) sets
+  `cooldown: default-days: 1` for npm (GitHub's `cooldown` option applies to
+  version updates, not security updates), which keeps its PRs from proposing
+  a version younger than a day. Known case at the time of writing: the
+  lockfile holds `eve@0.90.0` (published 2026-10-29T19:24Z) and several
+  `ai`/`@ai-sdk/*` entries (published 2026-10-29T17:08Z), so a fresh
+  `pnpm install --frozen-lockfile` fails until about 2026-10-30T19:25Z; after
+  that it passes with no change. Until then, local installs and CI wait too.
+
+A doc or code comment that names a version is fixed in the same PR as the bump
+that makes it stale. `agent/lib/docs-accuracy.test.ts` (part of `pnpm test`, so
+part of CI) enforces this for the docs: it fails when a doc names a pnpm
+script, a repo path, an environment variable (in the forms listed in item 2
+above) or an eve, `ai`, `@ai-sdk/*` or pnpm version that does not match the
+repo; the `ai: ^x.y.z` form is compared with the `overrides` entry in
+`pnpm-workspace.yaml`, other ranges with `package.json`. It does not read
+code comments, so after a bump also `grep -rn` the old version under `agent/`, `evals/`,
+`scripts/` and `.github/`. After an eve or
+`@ai-sdk/harness-claude-code` bump also do the preview-deploy check in
+[Verification](#verification).
 
 ## External health check
 
@@ -94,12 +164,22 @@ stayed green, because the tools needing a checkout degraded honestly instead of
 erroring.
 
 [`.github/workflows/sandbox-health.yml`](../.github/workflows/sandbox-health.yml)
-closes that gap. It runs an hour after the daily maintenance schedule, asks the
-agent to warm and report one machine-readable line, and alerts when the answer
-is missing *or* unhealthy — "could not confirm" is not "fine". It needs one
-extra secret beyond the health check's (`AGENT_API_KEY`, the eve channel's
-key), and it is external for the same reason: a schedule that stopped firing
-cannot report that it stopped firing.
+closes that gap. Once a day it asks the agent to run `echo SANDBOX_OK` through
+its built-in `bash` tool and report one machine-readable line. That opens a
+sandbox for the probe's new session, created from eve's build-time template
+snapshot — exactly the path that fails once that snapshot has expired
+(*"The runtime never recreates a template. Run `eve build` again and deploy its
+output"*, eve's `sandbox/troubleshooting.mdx`). It alerts when the answer is
+missing *or* unhealthy — "could not confirm" is not "fine" — and the repair is a
+redeploy ([docs/06-sandbox-lifecycle.md](06-sandbox-lifecycle.md)). It needs one
+extra secret beyond the health check's: `AGENT_API_KEY`, a bearer token that the
+agent's eve channel accepts. As shipped, `agent/channels/eve.ts` admits only
+`vercelOidc()` and `localDev()`, neither of which accepts such a token, so until
+you add an API-key verifier there the probe is answered `401` and the workflow
+fails (see the header of `sandbox-health.yml` and `scripts/orchestrate.mjs`,
+which sends it as `EVE_TOKEN`). That is a change to the channel's auth, so it
+is the owner's decision. The probe is external for the same reason as the health
+check: an agent that cannot open a sandbox cannot report that it cannot.
 
 ## Validate a branch against its preview before merging
 
@@ -164,12 +244,20 @@ cheap, unambiguous, and worth doing after every dependency bump of
 
 ## Verification
 
-- CI green on a trivial PR to the agent repo (all three gates).
+- CI green on a trivial PR to the agent repo (every gate above).
 - `curl -s -o /dev/null -w "%{http_code}" https://<domain>/eve/v1/health` → `200`.
 - Manually dispatch the health-check workflow (`workflow_dispatch`) and confirm the
   ping step passes; if Resend is configured, temporarily point `EVE_HEALTH_URL` at
   a bogus path and confirm the alert email arrives, then restore it.
 - The E2E probe PR passes the four checks above.
+- **Owner checkpoint: one preview deploy to verify the bridge assets.** The
+  hosted build output (`.vercel/output/functions/*.func`) cannot be produced
+  locally without real Vercel credentials, so after any change to
+  `scripts/copy-bridge-assets.mjs`, an eve bump or an
+  `@ai-sdk/harness-claude-code` bump, deploy one preview and confirm the build
+  log shows `[copy-bridge-assets] bridge assets → …/<fn>.func/…/bridge` (and no
+  `refusing to ship`), then run one `warm_sandbox` against that preview (see
+  above). A missing line means the dev-agent will fail with `ENOENT … bridge/…`.
 
 Next: [docs/08-extensions.md](08-extensions.md) (optional add-ons) and
 [docs/09-customization-checklist.md](09-customization-checklist.md) (the full

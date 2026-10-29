@@ -1,9 +1,6 @@
-import {
-  HarnessAgent,
-  prepareHarnessSandboxTemplate,
-} from "@ai-sdk/harness/agent";
+import { createHarnessSandboxTemplate, HarnessAgent } from "@ai-sdk/harness/agent";
 import { createClaudeCode } from "@ai-sdk/harness-claude-code";
-import { createVercelSandbox } from "@ai-sdk/sandbox-vercel";
+import { createVercelNetworkSandboxSession } from "@ai-sdk/sandbox-vercel";
 import { tool } from "ai";
 import { z } from "zod";
 import {
@@ -15,6 +12,7 @@ import {
 } from "./estate.ts";
 import { githubToken } from "./github-token.ts";
 import {
+  HARNESS_SESSION_NAME_PREFIX,
   SANDBOX_TAG_KEY,
   SANDBOX_TAG_VALUE,
   sweepOrphanForkSnapshots,
@@ -37,7 +35,7 @@ import {
 // TIME MODEL: each eve tool call runs as one Vercel Workflow step capped
 // near the plan max (~800s on Pro, 300s on Hobby). The template build must
 // therefore happen OUT of band (warm_sandbox tool → daily schedule →
-// prepareHarnessSandboxTemplate), and every run self-limits to
+// warmSandboxTemplate), and every run self-limits to
 // DEV_AGENT_TIME_BUDGET_MS (default 700s) so it ends cleanly with a partial
 // result + diagnostics instead of being killed by the platform (a dirty kill
 // loses everything AND retries the step up to 3×, each retry booting a fresh
@@ -45,20 +43,19 @@ import {
 //
 // Result channel: the report_result host tool (structured), with the
 // DEV_AGENT_RESULT text marker as a legacy fallback. Caching: estate clone +
-// deps install in onBootstrap → provider snapshot → fork per session;
+// deps install in onBootstrap → template snapshot → fork per session;
 // onSession = fresh short-lived credentials + base sync + target-branch
 // checkout + incremental install + probes. No credentials ever persist in
 // the template snapshot.
 //
-// TEMPLATE LIFECYCLE: the persistent template sandbox built by
-// warmSandboxTemplate() (1) carries `keepLastSnapshots: {count: 2,
-// deleteEvicted: true}` + `snapshotExpiration` so repeated warms don't
-// accumulate snapshots, and (2) sweeps orphaned prior-identity template
-// sandboxes (and their snapshots, explicitly — CLI/API removal does not
-// reliably cascade-delete them) every time it runs. See
-// agent/lib/template-sweep.ts for the full design and why the sweep's
-// "current" is identified by recency rather than an exact name match.
-// Per-run forks are torn down snapshot-free via patchForkSessionTeardown.
+// SANDBOX WIRING (@ai-sdk/sandbox-vercel's createVercelNetworkSandboxSession):
+// the harness template (createHarnessSandboxTemplate: the Claude Code bridge
+// recipe + onBootstrap) is built once per identity into a snapshot of a
+// non-persistent template sandbox, and each run forks a NON-persistent live
+// sandbox from it, which this module owns and destroys. Stale prior-identity
+// templates (and their snapshots, explicitly — removal does not reliably
+// cascade) are swept on every warm; see agent/lib/template-sweep.ts for why
+// the sweep's "current" is identified by recency rather than an exact name.
 //
 // OPERATIONAL NOTE: ANTHROPIC_AUTH_TOKEN (from `claude setup-token`) expires
 // ~1 year after issuance. Nothing in this app auto-alerts on approaching
@@ -291,18 +288,19 @@ function requireSubscriptionToken(): void {
  * auth mode is pinned by a unit test. A regression here is a silent billing
  * leak, not a visible failure, so it gets a test of its own.
  *
- * `auth: "direct"` means "use the Anthropic credential, never the Gateway".
- * The harness normalizes it to `{ anthropic: {} }`, which reads
- * ANTHROPIC_AUTH_TOKEN from the environment.
+ * `auth: "direct"` means "use the Anthropic credential, never the Gateway":
+ * the harness reads ANTHROPIC_AUTH_TOKEN from the environment, and the real
+ * token stays on the host (the sandbox gets a placeholder that the host
+ * swaps for the real bearer at egress, only toward the Anthropic API).
  *
  * Precedence re-verified by reading `resolveClaudeCodeEnv` in
- * @ai-sdk/harness-claude-code 1.0.42, 1.0.65 and 1.0.88: an anthropic branch
- * is checked FIRST and returns before the gateway env is read, whereas with
- * no explicit auth a truthy `getAiGatewayAuthFromEnv().apiKey` short-circuits
- * to `pickGateway` ahead of the ANTHROPIC_AUTH_TOKEN fallback. Older versions
- * took an object here (`{ anthropic: { authToken } }`) — it still resolves the
- * same way but is deprecated, and it is silently IGNORED by versions that
- * predate it, which is its own trap.
+ * @ai-sdk/harness-claude-code 1.0.42, 1.0.65, 1.0.88 and 1.0.172: with
+ * `"direct"` an anthropic branch returns before the gateway env is read,
+ * whereas with no explicit auth a truthy `getAiGatewayAuthFromEnv().apiKey`
+ * short-circuits to `pickGateway` ahead of the ANTHROPIC_AUTH_TOKEN fallback.
+ * Versions up to 1.0.88 took an object here (`{ anthropic: { authToken } }`);
+ * 1.0.172 rejects that nested form (an object `auth` must now be a flat
+ * string record that replaces the process env), so keep the mode string.
  *
  * The throw guards a second, subtler leak: `pickAnthropic` merges
  * `processEnv.ANTHROPIC_API_KEY` into the sandbox env even when an explicit
@@ -342,7 +340,7 @@ const DEFAULT_TEMPLATE_SNAPSHOT_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000;
  * positive-override guard pattern as sandbox-config.ts. Default 7 days:
  * expiration is the backstop for ORPHANED template lineages after a
  * bootstrap-hash/recipe bump — same-name lineage pruning is
- * keepLastSnapshots' job below. The daily warm schedule keeps the live
+ * the stale-template sweep's job. The daily warm schedule keeps the live
  * template's snapshot fresh well inside this window.
  */
 export function resolveTemplateSnapshotExpirationMs(): number {
@@ -350,91 +348,64 @@ export function resolveTemplateSnapshotExpirationMs(): number {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_TEMPLATE_SNAPSHOT_EXPIRATION_MS;
 }
 
-/** Structural view of the provider session this wrapper needs. */
-type ForkSessionLike = {
-  destroy?: () => Promise<void>;
-  sandbox?: { delete: () => Promise<void> };
-};
-
 /**
- * Make per-run fork teardown snapshot-free. The provider's session
- * `destroy()` is `sandbox.stop().catch(...) → sandbox.delete()`
- * (node_modules/@ai-sdk/sandbox-vercel/dist/index.js), and `stop()` always
- * mints a full-size (multi-GB) snapshot that `delete()` does NOT
- * cascade-remove — pure waste for a throwaway fork, which the sweeps in
- * template-sweep.ts then have to chase (including a 1-2 min publish race).
- * Overriding `destroy` to call `sandbox.delete()` directly mints nothing.
- *
- * Scope: ONLY the fork session's destroy. The TEMPLATE snapshot is created
- * inside `provider.createSession` internals (Sandbox.getOrCreate + stop —
- * that stop-snapshot IS the template, wanted) and `resumeSession` is
- * untouched (a resumed session's stop-snapshot is its resume point, wanted
- * for future multi-step continuation). Mutates the freshly-created session
- * in place rather than spreading it, so prototype members survive.
- *
- * Fail-safe: if the direct delete throws (e.g. the platform rejects deleting
- * a running sandbox), fall back to the original destroy — behavior degrades
- * to the stop+delete path with the sweeps as backstop.
+ * Fork sandbox id for one run: `ai-sdk-harness-session-<sessionId>`. The
+ * prefix is what template-sweep.ts's sweepSessionSnapshots and
+ * isHarnessTemplateName key on, so the per-run sweeps keep finding forks and
+ * the stale-template sweep never mistakes one for a template.
  */
-export function patchForkSessionTeardown<S>(session: S): S {
-  const forkSession = session as ForkSessionLike;
-  const originalDestroy = forkSession.destroy?.bind(forkSession);
-  const sandbox = forkSession.sandbox;
-  if (originalDestroy && sandbox && typeof sandbox.delete === "function") {
-    forkSession.destroy = async () => {
-      try {
-        await sandbox.delete();
-      } catch {
-        await originalDestroy();
-      }
-    };
-  }
-  return session;
-}
-
-type DevSandboxProvider = ReturnType<typeof createVercelSandbox>;
-
-function withSnapshotFreeForkTeardown(provider: DevSandboxProvider): DevSandboxProvider {
-  const original = provider.createSession.bind(provider);
-  (provider as { createSession: DevSandboxProvider["createSession"] }).createSession = (async (
-    ...args: Parameters<DevSandboxProvider["createSession"]>
-  ) => patchForkSessionTeardown(await original(...args))) as DevSandboxProvider["createSession"];
-  return provider;
+export function devForkSandboxId(sessionId: string): string {
+  return `${HARNESS_SESSION_NAME_PREFIX}${sessionId}`;
 }
 
 /**
- * Retention (`snapshotExpiration` + `keepLastSnapshots`) is UNCONDITIONAL —
- * on the provider itself, not only on explicit warm calls: the provider's
- * template snapshotId cache is in-memory PER FUNCTION INSTANCE
- * (@ai-sdk/sandbox-vercel's getSnapshotCache), so every Fluid instance that
- * cache-misses re-runs Sandbox.getOrCreate on the persistent template,
- * re-stops it, and mints ANOTHER full-size template snapshot. If only the
- * explicit-warm path carried retention params, implicit warms (the common
- * path — any run on a fresh instance) would leak untended multi-GB snapshots
- * (observed live in the reference deployment: 3 template snapshots minted
- * across 4 runs, one with NO expiration at all — getOrCreate defaults
- * snapshotExpiration to 0/never when unset).
+ * Create options for createVercelNetworkSandboxSession, shared by the
+ * template it builds and every fork it creates from that template's
+ * snapshot (node_modules/@ai-sdk/sandbox-vercel/src/vercel-sandbox.ts).
  *
- * `count: 2`, deliberately not 1: eviction fires when a newer same-name
- * snapshot is minted — exactly the moment OTHER warm instances still hold
- * the previous snapshotId in their in-memory cache. count:1 would delete the
- * snapshot under them and poison every subsequent fork on those instances
- * until they recycle; count:2 keeps one grace generation so a cached id
- * survives one re-stop cycle. Never lower this.
+ * - `persistent: false`: @vercel/sandbox sandboxes are "persistent by
+ *   default: the filesystem is snapshotted when a sandbox stops" (its
+ *   README). A per-run fork is thrown away, so it must not mint a
+ *   multi-GB snapshot on stop/destroy. (The template is created
+ *   non-persistent by the package itself; @ai-sdk/sandbox-vercel 1.0.168
+ *   passes `persistent` through to forks.)
+ * - `snapshotExpiration`: stamped on the template snapshot. The daily warm
+ *   forks from it, and a snapshot's TTL counts from its last use, so an
+ *   active template never lapses; this is the backstop for orphaned
+ *   prior-identity lineages.
+ * - The runtime must match the TARGET repos' engines pins, not this agent
+ *   app's own node version — see estate.ts's sandboxRuntime().
+ * - The claude-code bridge requires at least one exposed TCP port.
  */
-function makeSandboxProvider() {
-  return withSnapshotFreeForkTeardown(createVercelSandbox({
-    // The runtime must match the TARGET repos' engines pins, not this agent
-    // app's own node version — see estate.ts's sandboxRuntime().
+export function buildDevSandboxCreateOptions() {
+  return {
     runtime: sandboxRuntime(),
     resources: { vcpus: 8 },
     timeout: 45 * 60 * 1000,
-    // The claude-code bridge requires at least one exposed TCP port.
     ports: [4000],
     tags: { [SANDBOX_TAG_KEY]: SANDBOX_TAG_VALUE },
     snapshotExpiration: resolveTemplateSnapshotExpirationMs(),
-    keepLastSnapshots: { count: 2, deleteEvicted: true },
-  }));
+    persistent: false,
+  };
+}
+
+/**
+ * A fork for one sandbox id, created from the harness template (built from
+ * the agent's harness bootstrap recipe + sandboxConfig, so its identity
+ * changes exactly when the recipe or the enabled estate changes). The
+ * caller owns the returned session and must destroy it.
+ */
+async function createDevSandboxSession(
+  template: Awaited<ReturnType<typeof createHarnessSandboxTemplate>>,
+  sandboxId: string,
+  abortSignal?: AbortSignal,
+) {
+  return createVercelNetworkSandboxSession({
+    ...buildDevSandboxCreateOptions(),
+    ...(template ? { template } : {}),
+    sandboxId,
+    ...(abortSignal ? { abortSignal } : {}),
+  });
 }
 
 function installCommand(pm: EstateRepo["packageManager"]): string {
@@ -477,13 +448,16 @@ export const SESSION_SECRETS_PATH = "/tmp/dev-task-secrets.json";
 /**
  * Credential-delivery design decision (the most credential-sensitive part of
  * the whole pattern): secret VALUES must never appear in the prompt string,
- * a skill file, a command string, or a log line. The installed harness
- * surface offers no per-session env passthrough into the underlying Claude
- * Code process's own tool executions (verified against
- * @ai-sdk/harness's `HarnessAgentSandboxConfig` — only
- * workDir/bootstrapHash/onBootstrap/onSession — and
- * @ai-sdk/harness-claude-code's settings — only
- * auth/model/maxTurns/thinking/port/startupTimeoutMs). So this reuses the
+ * a skill file, a command string, or a log line. Re-verified against
+ * @ai-sdk/harness 1.0.168 (`HarnessAgentSandboxConfig`: workDir,
+ * bootstrapHash, onBootstrap, onSession) and @ai-sdk/harness-claude-code
+ * 1.0.172 (settings: auth, credentialForwarding, env, mcpServers, model,
+ * maxTurns, thinking, effort, port, startupTimeoutMs and others). The new
+ * `env` setting is harness-wide, fixed when createClaudeCode() runs, and
+ * merged into the Claude Code process env in plain text: only the four
+ * model-credential variables are brokered through egress placeholders
+ * (CLAUDE_CODE_CREDENTIAL_ENVIRONMENT_VARIABLES), so `env` is no safer a
+ * channel for arbitrary per-run secrets than a file. So this reuses the
  * exact mechanism `writeGitCredentials` establishes for the GitHub token: a
  * host-side `session.run` call, once per forked session (never in
  * `onBootstrap`, so nothing is ever baked into the reusable template
@@ -821,7 +795,6 @@ async function runOnce(params: {
         pushLog(String(event));
       }
     },
-    sandbox: makeSandboxProvider(),
     sandboxConfig: makeSandboxConfig(state, { repo: target, branch }, sessionSecrets),
   });
 
@@ -834,15 +807,28 @@ async function runOnce(params: {
     60,
   );
 
+  // This module owns the fork (it is passed to createSession as an existing
+  // sandbox session), so every path below destroys it.
+  let sandboxSession: Awaited<ReturnType<typeof createDevSandboxSession>> | undefined;
   let session;
   try {
-    session = await agent.createSession({ sessionId, abortSignal: budgetSignal });
+    sandboxSession = await createDevSandboxSession(
+      await agent.getSandboxTemplate(),
+      devForkSandboxId(sessionId),
+      budgetSignal,
+    );
+    session = await agent.createSession({
+      sessionId,
+      sandboxSession,
+      abortSignal: budgetSignal,
+    });
   } catch (error) {
-    // A failed createSession can leave a half-created fork sandbox (stopped,
-    // with a stop-snapshot) under this sessionId that nothing else will ever
-    // destroy — observed live in the reference deployment (a secrets-write
-    // failure left sandbox + multi-GB snapshot orphaned). Sweep both;
+    // A failed start can leave a half-created fork sandbox under this
+    // sessionId that nothing else will ever destroy — observed live in the
+    // reference deployment (a secrets-write failure left sandbox + multi-GB
+    // snapshot orphaned). Destroy what we hold, then sweep by name;
     // fail-soft by design.
+    await Promise.resolve(sandboxSession?.destroy()).catch(() => {});
     await sweepSessionSnapshots(sessionId, { deleteSandbox: true }).catch(() => {});
     return finalize(
       { status: "failed", summary: "Dev-agent could not create its sandbox session." },
@@ -907,22 +893,28 @@ async function runOnce(params: {
     // A cleanup failure here must never discard an already-computed good
     // result: swallow it, and only attach a one-line, redacted note when we
     // actually have a result to attach it to.
-    try {
-      await session.destroy();
-    } catch (destroyError) {
-      if (outcome) {
-        const note = redactSecrets(`session.destroy() failed: ${errToString(destroyError)}`);
-        outcome = {
-          ...outcome,
-          diagnostics: [outcome.diagnostics, note].filter(Boolean).join("\n---\n"),
-        };
+    // session.destroy() ends the harness runtime only: the fork was passed in
+    // as an existing sandbox session, so its lifecycle is ours to end.
+    for (const [label, destroy] of [
+      ["session.destroy()", () => session.destroy()],
+      ["sandbox destroy()", () => sandboxSession!.destroy()],
+    ] as const) {
+      try {
+        await destroy();
+      } catch (destroyError) {
+        if (outcome) {
+          const note = redactSecrets(`${label} failed: ${errToString(destroyError)}`);
+          outcome = {
+            ...outcome,
+            diagnostics: [outcome.diagnostics, note].filter(Boolean).join("\n---\n"),
+          };
+        }
       }
     }
-    // With the snapshot-free teardown patch, destroy() normally leaves zero
-    // trace — but if the patch fell back to stop()+delete(), stop() minted a
-    // snapshot the delete does NOT cascade-remove. Sweep this fork's
-    // snapshot(s) so every run ends at zero leftovers. deleteSandbox too: if
-    // destroy() itself failed, the stopped fork may still exist. Then the
+    // The fork is non-persistent, so destroy() (stop + delete) mints no
+    // snapshot. Sweep this fork's name anyway so every run ends at zero
+    // leftovers even if destroy() failed (deleteSandbox: the fork may still
+    // exist). Then the
     // deferred orphan sweep picks up PRIOR runs' fork snapshots that were
     // still publishing when their own immediate sweep ran (the 1-2 min
     // publish race — see MIN_ORPHAN_SNAPSHOT_AGE_MS). Cost-hygiene only;
@@ -1043,12 +1035,23 @@ export async function warmSandboxTemplate(
   const state = { estate: "warm-only" };
   try {
     requireSubscriptionToken();
-    await prepareHarnessSandboxTemplate({
-      harness: makeHarness(),
-      sandboxProvider: makeSandboxProvider(),
-      sandboxConfig: makeSandboxConfig(state, null),
-      ...(abortSignal ? { abortSignal } : {}),
+    // Same harness + bootstrapHash + onBootstrap as a run, so the same
+    // template identity. Creating one fork builds the template when it is
+    // missing and otherwise "uses" its snapshot, which restarts the
+    // snapshot's TTL ("measured from the snapshot's last use"). The fork is
+    // destroyed right away; its name is swept like a run's.
+    const { onSession: _onSession, ...templateConfig } = makeSandboxConfig(state, null);
+    const template = await createHarnessSandboxTemplate({
+      harnesses: [makeHarness()],
+      sandboxConfig: templateConfig,
     });
+    const warmId = `warm-${Date.now().toString(36)}`;
+    try {
+      const fork = await createDevSandboxSession(template, devForkSandboxId(warmId), abortSignal);
+      await Promise.resolve(fork.destroy()).catch(() => {});
+    } finally {
+      await sweepSessionSnapshots(warmId, { deleteSandbox: true }).catch(() => {});
+    }
   } catch (error) {
     return {
       ready: false,

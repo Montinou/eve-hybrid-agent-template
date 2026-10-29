@@ -9,7 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   bootstrapHash,
+  buildDevSandboxCreateOptions,
   buildSessionSecretsCommand,
+  devForkSandboxId,
   MAX_DEV_AGENT_TIME_BUDGET_MS,
   parseDevTaskSecrets,
   parseResultMarker,
@@ -17,6 +19,7 @@ import {
   resolveBudgetMs,
   SESSION_SECRETS_PATH,
 } from "./dev-agent.ts";
+import { isHarnessTemplateName, SANDBOX_TAG_KEY, SANDBOX_TAG_VALUE } from "./template-sweep.ts";
 
 describe("resolveBudgetMs", () => {
   afterEach(() => {
@@ -283,5 +286,44 @@ describe("buildSessionSecretsCommand", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("buildDevSandboxCreateOptions", () => {
+  // Options for createVercelNetworkSandboxSession (@ai-sdk/sandbox-vercel).
+  // The template and every fork are created from them.
+  it("creates NON-persistent sandboxes so a fork's stop()/destroy() mints no snapshot", () => {
+    // @vercel/sandbox README: "Sandboxes are persistent by default: the
+    // filesystem is snapshotted when a sandbox stops". A throwaway fork must
+    // opt out, or every run leaks a multi-GB snapshot.
+    expect(buildDevSandboxCreateOptions().persistent).toBe(false);
+  });
+
+  it("keeps the bridge port, the app tag, 8 vCPUs and the 45-minute lifetime", () => {
+    const opts = buildDevSandboxCreateOptions();
+    expect(opts.ports).toEqual([4000]);
+    expect(opts.tags).toEqual({ [SANDBOX_TAG_KEY]: SANDBOX_TAG_VALUE });
+    expect(opts.resources).toEqual({ vcpus: 8 });
+    expect(opts.timeout).toBe(45 * 60 * 1000);
+  });
+
+  it("selects the base by `runtime` only (runtime and image are mutually exclusive)", () => {
+    const opts = buildDevSandboxCreateOptions() as Record<string, unknown>;
+    expect(typeof opts.runtime).toBe("string");
+    expect("image" in opts).toBe(false);
+  });
+
+  it("stamps TEMPLATE_SNAPSHOT_EXPIRATION_MS on the template snapshot", () => {
+    vi.stubEnv("TEMPLATE_SNAPSHOT_EXPIRATION_MS", String(3 * 24 * 60 * 60 * 1000));
+    expect(buildDevSandboxCreateOptions().snapshotExpiration).toBe(3 * 24 * 60 * 60 * 1000);
+    vi.unstubAllEnvs();
+  });
+});
+
+describe("devForkSandboxId", () => {
+  it("names forks so sweepSessionSnapshots finds them and the template sweep never does", () => {
+    const id = devForkSandboxId("dev-task-repo-abc");
+    expect(id).toBe("ai-sdk-harness-session-dev-task-repo-abc");
+    expect(isHarnessTemplateName(id)).toBe(false);
   });
 });

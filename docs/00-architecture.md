@@ -6,6 +6,8 @@ Read this first. Every later doc assumes you understand the split described here
 
 One durable [eve](https://eve.dev) agent deployed on Vercel splits every request into a **cheap orchestration layer** and an **expensive execution layer**, with different auth and different billing for each. A small AI-Gateway model runs the loop (routing turns, calling tools, formatting results); the heavy work runs as **real Claude Code** — subscription auth, full CLI — inside a Vercel Sandbox, launched from a tool via `@ai-sdk/harness`.
 
+The hybrid split is this template's own convention, built on eve and the AI SDK harness packages (`@ai-sdk/harness`, `@ai-sdk/harness-claude-code`, `@ai-sdk/sandbox-vercel`). It is not an eve feature: eve supplies the durable loop, channels, tools and sandboxes, and the template composes them with the harness packages so the expensive layer can bill to a subscription.
+
 ## The diagram
 
 ```
@@ -26,7 +28,7 @@ chat / API ───────► standard eve channel (HTTP: terminal UI, use
                      │  resolves context the sandbox can't see, builds the
                      │  prompt, NEVER puts secrets in it
                      ▼
-              dev-agent: HarnessAgent + createClaudeCode + createVercelSandbox
+              dev-agent: HarnessAgent + createClaudeCode + createVercelNetworkSandboxSession
               (agent/lib/dev-agent.ts)
               — real Claude Code CLI, subscription auth (ANTHROPIC_AUTH_TOKEN),
                 running INSIDE the sandbox against a pre-cloned repo estate
@@ -42,7 +44,7 @@ The loop generates many small turns; the dev-agent generates a few big runs. The
 | Layer | Runs where | Model config | Auth | Bills to |
 |---|---|---|---|---|
 | eve loop turns (routing, orchestration, comment posting) | Vercel function (host) | AI Gateway string (e.g. `anthropic/claude-sonnet-4.5`) or an AI SDK `LanguageModel` | Vercel OIDC (automatic on Vercel) or `AI_GATEWAY_API_KEY` | Vercel AI Gateway (or the provider console, for a provider `LanguageModel`) |
-| Nested dev-agent (Claude Code CLI) | INSIDE the Vercel Sandbox | `createClaudeCode({ auth: { anthropic: { authToken } }, model? })` — the explicit auth block is REQUIRED (see below) | `ANTHROPIC_AUTH_TOKEN` (subscription OAuth from `claude setup-token`) | Claude subscription + its extra-usage credits |
+| Nested dev-agent (Claude Code CLI) | INSIDE the Vercel Sandbox | `createClaudeCode({ auth: "direct", model? })` — pinning the auth mode is REQUIRED (see below) | `ANTHROPIC_AUTH_TOKEN` (subscription OAuth from `claude setup-token`) | Claude subscription + its extra-usage credits |
 | Sandbox compute | Vercel | — | — | Vercel (vCPU-minutes + snapshot storage); unavoidable |
 
 ## The latency/cost split
@@ -53,14 +55,14 @@ Turn routing, comment posting, and result formatting do not need a frontier mode
 
 **eve's loop cannot authenticate with a Claude subscription token.** This is the single fact the whole design hangs on — do not re-litigate it:
 
-- `defineAgent`'s `model` accepts ONLY (a) a Gateway model string, or (b) an AI SDK `LanguageModel` backed by a provider API key. There is no way to hand eve a subscription OAuth token (`sk-ant-oat01…`). Verified against eve's bundled docs and source, 0.24 through 0.44.
+- `defineAgent`'s `model` accepts ONLY (a) a Gateway model string, or (b) an `EveLanguageModel` instance, i.e. an AI SDK `LanguageModel` such as the `eve/models/anthropic` helper, which uses `ANTHROPIC_API_KEY` (deployments require that key in the server environment). The bundled docs document no way to hand eve a subscription OAuth token (`sk-ant-oat01…`). Checked against the docs shipped with the installed eve (`node_modules/eve/docs/agent-config.md`, "Set the model"); re-check it after an eve upgrade.
 - The structural reason: the loop's model call happens on the **host** (the Vercel function). Subscription auth is a Claude-Code-surface entitlement — it only works where the entire Claude Code CLI runs. In this pattern that is *inside the sandbox*, via `@ai-sdk/harness-claude-code`.
-- **And the harness must be told explicitly.** Its auth resolution prefers gateway credentials found in the env (automatic OIDC on Vercel) over `ANTHROPIC_AUTH_TOKEN` whenever auth is left at its `"auto"` default — the nested agent then silently bills Opus through the AI Gateway at API prices (a real US$7.79/week leak, caught 2026-07-27). `createClaudeCode` MUST receive **`auth: "direct"`** (the object form, `{ anthropic: { authToken } }`, resolves identically but is deprecated — and is silently ignored by versions predating it). Precedence re-verified unchanged at 1.0.42, 1.0.65 and 1.0.88. **Detection:** `anthropic/claude-*` rows attributed to the project in the AI Gateway dashboard — subscription traffic never appears there. See [docs/05-dev-agent.md](05-dev-agent.md).
+- **And the harness must be told explicitly.** Its auth resolution prefers gateway credentials found in the env (automatic OIDC on Vercel) over `ANTHROPIC_AUTH_TOKEN` whenever auth is left at its `"auto"` default — the nested agent then silently bills Opus through the AI Gateway at API prices (a real US$7.79/week leak, caught 2026-07-27). `createClaudeCode` MUST receive **`auth: "direct"`** (the old nested object form, `{ anthropic: { authToken } }`, is rejected by 1.0.172, where an object `auth` must be a flat string record). Precedence re-verified unchanged at 1.0.42, 1.0.65, 1.0.88 and 1.0.172; since 1.0.172 the real token stays on the host and is swapped in at egress, only toward the Anthropic API. **Detection:** `anthropic/claude-*` rows attributed to the project in the AI Gateway dashboard — subscription traffic never appears there. See [docs/05-dev-agent.md](05-dev-agent.md).
 - Subscription extra-usage credits only burn on Claude-Code surfaces with subscription auth. They do NOT apply to Gateway or `ANTHROPIC_API_KEY` traffic. That is exactly why the heavy layer uses the harness: the expensive runs draw on a flat-rate subscription instead of metered API billing.
 
-So the **only** place the subscription token appears is `agent/lib/dev-agent.ts`, where it is guarded for presence and passed EXPLICITLY as the harness's `auth.anthropic.authToken`. It never configures the loop model, and it never appears in prompts or logs.
+So the **only** place the subscription token appears is `agent/lib/dev-agent.ts`, where it is guarded for presence and the harness is pinned to it EXPLICITLY with `auth: "direct"` (the harness then reads `ANTHROPIC_AUTH_TOKEN` from the host env). It never configures the loop model, and it never appears in prompts or logs.
 
-**Accepted risk (state it in your own design doc):** the token is forwarded to the sandbox bridge, so it exists inside a sandbox that processes untrusted content (PR diffs, comments). Mitigations: the token is revocable, blast radius is subscription quota — not org data — and the orchestrator's security-boundary instructions (see [docs/04-orchestrator.md](04-orchestrator.md)) treat all webhook content as untrusted input.
+**Accepted risk (state it in your own design doc):** with `@ai-sdk/harness-claude-code` 1.0.172 and a Vercel network sandbox session, the real token stays on the host: the sandbox gets a placeholder, and the host swaps the real `Authorization` bearer in at egress, only for requests to the Anthropic API. That depends on the sandbox session supporting `addRequestTransformations` (the dev-agent's `createVercelNetworkSandboxSession` forks do; `harness-auth-contract.test.ts` pins it). On a session without it, `applyCredentialForwarding` forwards the real token into the sandbox and the harness only logs a warning. Either way, code running in the sandbox, which processes untrusted content (PR diffs, comments), can still USE the brokered credential toward `api.anthropic.com`, so the quota risk remains. Mitigations: the token is revocable, blast radius is subscription quota — not org data — and the orchestrator's security-boundary instructions (see [docs/04-orchestrator.md](04-orchestrator.md)) treat all webhook content as untrusted input.
 
 ## Fail-soft everywhere
 
@@ -72,8 +74,8 @@ Every capability returns a structured result — `{ status: "ok" | "partial" | "
 |---|---|---|
 | Defined in | `agent/sandbox.ts` | `agent/lib/dev-agent.ts` |
 | Purpose | tool-exec env for the eve loop (channel checkouts, bash) | the dev-agent's world (estate clones, Claude Code) |
-| Persistence | one durable sandbox per session; idle-expires → snapshot → resumes | one persistent TEMPLATE + a throwaway FORK per run |
-| Knobs | `SANDBOX_IDLE_TIMEOUT_MS`, `SANDBOX_SNAPSHOT_EXPIRATION_MS` | `TEMPLATE_SNAPSHOT_EXPIRATION_MS` + provider options |
+| Persistence | one durable sandbox per session; terminated after its lifetime → resumed from its saved filesystem | one TEMPLATE snapshot per recipe + a throwaway non-persistent FORK per run |
+| Knobs | `SANDBOX_TIMEOUT_MS`, `SANDBOX_SNAPSHOT_EXPIRATION_MS` | `TEMPLATE_SNAPSHOT_EXPIRATION_MS` + create options |
 
 Confusing the two is the #1 source of mystery Vercel costs. Full treatment in [docs/06-sandbox-lifecycle.md](06-sandbox-lifecycle.md).
 
@@ -96,7 +98,7 @@ A useful middle ground: start plain, and adopt only the pieces you need. The tem
 
 ## Real-world example
 
-This template is the domain-stripped scaffold of a production QA agent: a GitHub App listens to PR events on a frontend monorepo, a flash-lite model handles high-frequency shadow turns, `@bot` commands route to a mid-tier orchestrator model, and nested Claude Code runs code review / test planning / preview validation inside the sandbox against a multi-repo estate. Everything here — the budget clamp, the fork-teardown patch, the bridge-asset copy — exists because it failed in that production system first.
+This template is the domain-stripped scaffold of a production QA agent: a GitHub App listens to PR events on a frontend monorepo, a flash-lite model handles high-frequency shadow turns, `@bot` commands route to a mid-tier orchestrator model, and nested Claude Code runs code review / test planning / preview validation inside the sandbox against a multi-repo estate. Everything here — the budget clamp, the snapshot-free fork teardown, the bridge-asset copy — exists because it failed in that production system first.
 
 ## Where each concept lives in the template
 
@@ -110,7 +112,8 @@ This template is the domain-stripped scaffold of a production QA agent: a GitHub
 | eve channel sandbox | `agent/sandbox.ts`, `agent/lib/sandbox-config.ts` |
 | Template warming + sweeps | `agent/tools/warm_sandbox.ts`, `agent/lib/template-sweep.ts`, `agent/schedules/template-maintenance.md` |
 | Build post-processing | `scripts/copy-bridge-assets.mjs` |
-| External health monitoring | `.github/workflows/health-check.yml` |
+| External health monitoring | `.github/workflows/health-check.yml`, `.github/workflows/sandbox-health.yml` |
+| Evals (live-loop behavior unit tests cannot reach) | `evals/`, [docs/10-evals.md](10-evals.md) |
 
 ## Verification
 

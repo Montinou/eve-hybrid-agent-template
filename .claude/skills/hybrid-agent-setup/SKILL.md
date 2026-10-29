@@ -24,11 +24,15 @@ coding agent (Claude Code, Codex, Cursor) or human can follow it top to bottom.
 - Before writing any eve code in any phase, read
   `node_modules/eve/docs/README.md` first, then the specific reference page for
   the API you are touching (`reference/`, `channels/`, `tools/`,
-  `schedules.mdx`, `sandbox.mdx`). Never invent eve APIs from memory.
+  `schedules.mdx`, `sandbox/`, `evals/`). Never invent eve APIs from memory.
 - Before each phase, read the doc listed for it (`docs/NN-*.md`). The docs
   carry the rationale; this skill carries the order and the gates.
 - Package manager is **pnpm**. Build is always `pnpm build` — **never bare
   `eve build`** (see Hard constraint 2).
+- The hybrid shape (AI Gateway orchestrator, subscription-authenticated Claude
+  Code in a Vercel Sandbox) is this template's own convention, built on eve and
+  the AI SDK harness packages; it is not an eve feature. eve's bundled docs
+  describe eve, not this pattern.
 - Ask the human the listed questions at the start of each phase; do not guess
   answers to any of them. Where the template already has a sane default
   (models, timeouts, cron), defaults are fine unless the human objects.
@@ -83,6 +87,13 @@ pnpm build                    # eve build + copy-bridge-assets (mandatory pair)
 vercel deploy --prod          # or your team's deploy flow; builds take ~100s
 curl -sf https://{{VERCEL_PROJECT}}.vercel.app/eve/v1/health
 ```
+
+If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, the
+lockfile holds a release published under 24 h ago and pnpm 12's
+`minimumReleaseAge` (built-in default 1440 minutes) blocks it. It is a
+supply-chain control: never bypass the hold and never commit an exclude list
+or a lowered setting. Wait until the release is 24 h old, then re-run CI
+(docs/07-ops.md, "Staying current").
 
 **Verification gate:** `GET /eve/v1/health` on the deployed URL returns 200
 (this route is always public — it skips route auth), and
@@ -155,7 +166,8 @@ comment on the same PR creates NO session. **Do not proceed until both hold.**
 
 ## Phase 3 — Orchestrator brain
 
-**Doc to read first:** `docs/04-orchestrator.md`.
+**Doc to read first:** `docs/04-orchestrator.md`; then `docs/10-evals.md`
+before touching `evals/`.
 
 **Questions for the human:**
 
@@ -183,18 +195,24 @@ comment on the same PR creates NO session. **Do not proceed until both hold.**
   the shipped `[vercelOidc(), localDev()]` is fine for dev and internal
   callers but never admits external clients — wire real auth before making
   the HTTP surface public.
+- `evals/delegation.eval.ts`, `evals/routing.eval.ts` — keep the mention
+  command in sync with your grammar. `pnpm eval` runs them against a live
+  model, and the stubbed cases need the `allowToolStubs` grant on the target's
+  eve channel, which the shipped `agent/channels/eve.ts` does not give. Granting
+  it changes the channel's auth, so it is the owner's decision (docs/10-evals.md);
+  do not add it yourself to make the evals pass.
 - `agent/lib/model.ts` — only if changing compiled fallbacks; prefer env
   overrides (rollback = unset the var).
 - `agent/agent.ts` — the `defineDynamic` per-turn routing usually needs no
-  edits; if you add turn kinds, route on **`turn.started`**, never
-  `session.started` (Hard constraint 6).
+  edits; if you add turn kinds, keep the model memo keyed on the **turn**
+  (`ctx.turn?.id ?? null`), never the session (Hard constraint 6).
 
 **Commands to run:**
 
 ```bash
 pnpm typecheck && pnpm test
 node scripts/hash-instructions.mjs   # refresh the hash — CI gates instructions drift
-pnpm exec eve eval                   # optional: run evals/routing.eval.ts
+pnpm eval --list                    # optional: list the evals (docs/10-evals.md)
 pnpm build && vercel deploy --prod
 ```
 
@@ -259,11 +277,11 @@ pnpm build && vercel deploy --prod   # NEVER bare eve build
 ```
 
 Then warm the template out-of-band (probe comment or eve message invoking the
-`warm_sandbox` tool) and repeat until it reports `ready: true` — a cold
+`warm_sandbox` tool) and repeat until it reports `warmed: true` — a cold
 template build takes minutes and must never happen in the request path.
 Finally, run a `run_dev_task` probe through the real channel.
 
-**Verification gate:** `warm_sandbox` returns `ready: true`, AND a probe
+**Verification gate:** `warm_sandbox` returns `warmed: true`, AND a probe
 `run_dev_task` returns a structured result (`status: ok`, non-empty summary)
 posted back as a comment — not a thrown error, not free text. **Do not proceed
 until a full probe run completes.**
@@ -281,28 +299,29 @@ mystery costs.
 
 - Daily maintenance time (Vercel evaluates schedule crons in UTC; default
   `0 7 * * *` = 07:00 UTC).
-- Accept default expirations? `SANDBOX_IDLE_TIMEOUT_MS` 300000,
-  `SANDBOX_SNAPSHOT_EXPIRATION_MS` 7d, `TEMPLATE_SNAPSHOT_EXPIRATION_MS` 7d
-  (the last one is the harness knob — distinct lifecycle), and
-  `EVE_TEMPLATE_SNAPSHOT_EXPIRATION_MS` 30d for eve's own template.
+- Accept default lifetimes and expirations? `SANDBOX_TIMEOUT_MS` 1800000
+  (a hard sandbox lifetime, floored at 800000; the old name
+  `SANDBOX_IDLE_TIMEOUT_MS` is still accepted), `SANDBOX_SNAPSHOT_EXPIRATION_MS`
+  7d, and `TEMPLATE_SNAPSHOT_EXPIRATION_MS` 7d (the harness knob — distinct
+  lifecycle).
   **Never talk them into shortening `SANDBOX_SNAPSHOT_EXPIRATION_MS` to save
-  storage:** it governs eve's TEMPLATE too, and a short TTL turns a quiet week
-  into a silent outage (Hard constraint 13).
-- Deploy Hook URL for `EVE_DEPLOY_HOOK_URL` (Project → Settings → Git → Deploy
-  Hooks, production branch). Without it the agent cannot self-heal a lapsed
-  eve template — it just reports the problem and waits for a human.
+  storage:** it governs eve's build-time TEMPLATE snapshot too, and a short TTL
+  turns a quiet week into a silent outage (Hard constraint 13).
+- Who redeploys when the sandbox-health probe alerts? A lapsed eve template
+  is repaired only by a redeploy; nothing in the agent does it automatically.
 
 **Files to edit:**
 
 - `agent/sandbox.ts` — knobs only; the `git config --global --add
-  safe.directory /workspace` line in `onSession` must stay (Hard constraint 9).
+  safe.directory /workspace` line in the `defineSandbox` selector must stay
+  (Hard constraint 9).
 - `agent/schedules/template-maintenance.md` — set the cron; confirm the task
   body names the shipped tool (`warm_sandbox`) exactly.
 - `agent/lib/template-sweep.ts` — no edits; verify it is wired into the warm
   path and the schedule.
-- `agent/lib/eve-sandbox.ts` — no edits; verify `warm_sandbox` calls
-  `warmEveSandboxTemplate` and that `EVE_DEPLOY_HOOK_URL` is set. This module
-  covers the failure the health endpoint cannot see (Hard constraint 13).
+- `.github/workflows/sandbox-health.yml` — no edits; configure its vars and
+  secrets (docs/07-ops.md). It covers the failure the health endpoint cannot
+  see (Hard constraint 13).
 
 **Commands to run:**
 
@@ -315,15 +334,19 @@ Trigger the maintenance schedule (or wait for its slot), then inspect the
 Vercel sandbox/snapshot inventory.
 
 **Verification gate:** after one full `run_dev_task` run plus one maintenance
-pass, the inventory matches steady state — **1 harness template sandbox + ≤2
-template snapshots + 1 eve template WITH A LIVE SNAPSHOT + nothing else
-lingering.** Anything extra is a leak: identify which mechanism (retention,
-teardown patch, sweeps) missed it. An eve template with **zero** live snapshots
-is not a leak but an outage in waiting — the next turn will have no checkout,
-and nothing will say so.
+pass, the inventory matches steady state — **1 harness template sandbox + 1
+template snapshot + zero fork snapshots, plus eve's own build-time template
+snapshot and per-session sandboxes and snapshots (eve-managed, healthy; see
+docs/06-sandbox-lifecycle.md), nothing else lingering.** Anything beyond that is
+a leak: identify which mechanism (non-persistent forks, explicit fork
+destroy, sweeps) missed it.
 
-Confirm the maintenance run reported `eve.healthy: true`, not just that it
-finished.
+Confirm the maintenance run reported `warmed: true`, not just that it
+finished, and dispatch `sandbox-health.yml` once by hand: it must report
+`EVE_SANDBOX_STATUS=healthy`. It needs `secrets.AGENT_API_KEY`, a bearer token
+the eve channel accepts; the shipped `agent/channels/eve.ts` accepts none until
+an API-key verifier is added, which changes the channel's auth and so is the
+owner's decision (docs/07-ops.md).
 
 ---
 
@@ -342,15 +365,16 @@ optional extras and `docs/09-customization-checklist.md` to close out).
 
 **Files to edit:**
 
-- `.github/workflows/ci.yml` and `.github/workflows/health-check.yml` — set
-  the deployment URL and confirm secret names; the workflows themselves ship
-  ready.
+- `.github/workflows/health-check.yml` and `.github/workflows/sandbox-health.yml`
+  — no edits; set their repository variables and secrets (the deployment URL is
+  `vars.EVE_HEALTH_URL`). `.github/workflows/ci.yml` ships ready and needs no
+  configuration.
 
 **Commands to run:**
 
 ```bash
 pnpm typecheck && pnpm test
-git push                      # CI must go green: typecheck + vitest + instructions-hash gate
+git push                      # CI must go green: typecheck, vitest, build (no deprecation notice), instructions-hash gate
 ```
 
 Then manually dispatch the health-check workflow once, and finally open a
@@ -376,9 +400,9 @@ statuses. **The agent is not "done" until a full probe PR passed.**
    gateway credentials (automatic OIDC on Vercel) outrank
    `ANTHROPIC_AUTH_TOKEN`, and the nested agent silently bills Opus through
    the AI Gateway at API prices (real US$7.79/week leak, caught 2026-07-27).
-   The object form (`{ anthropic: { authToken } }`) resolves identically but
-   is deprecated — and is silently ignored by versions predating it.
-   Precedence re-verified at 1.0.42, 1.0.65 and 1.0.88; keep
+   The old nested object form (`{ anthropic: { authToken } }`) is rejected
+   by 1.0.172, where an object `auth` must be a flat string record.
+   Precedence re-verified at 1.0.42, 1.0.65, 1.0.88 and 1.0.172; keep
    `harness-auth-contract.test.ts` so the next bump has to re-verify too.
    Detection: `anthropic/claude-*` rows attributed to the project in the AI
    Gateway dashboard — subscription traffic never appears there.
@@ -389,15 +413,18 @@ statuses. **The agent is not "done" until a full probe PR passed.**
 3. **Sandbox runtime matches the TARGET repo's engines pin**, not the agent's
    node 24. One shared template = one runtime; diverging pins need per-repo
    node inside the recipe.
-4. **Fork teardown calls `sandbox.delete()` directly.** `stop()` mints a
-   full-size snapshot that `delete()` does NOT cascade-remove — pure waste for
-   a throwaway fork. The patch ships in `dev-agent.ts`; don't remove it.
-5. **`keepLastSnapshots: { count: 2 }` — never 1.** The provider caches the
-   template snapshotId in memory per function instance; count 1 deletes it out
-   from under warm instances and poisons their forks.
-6. **Model routing keys on `turn.started`, not `session.started`** — durable
-   sessions mix turn kinds, and `session.started` pins whichever model came
-   first forever.
+4. **Forks are created with `persistent: false`.** A persistent sandbox's
+   `stop()` mints a full-size snapshot that `delete()` does NOT cascade-remove —
+   pure waste for a throwaway fork. `buildDevSandboxCreateOptions()` in
+   `dev-agent.ts` sets it, and the dev-agent destroys every fork it creates.
+5. **Build forks with `createVercelNetworkSandboxSession`, never with the
+   plain sandbox constructor the removed-API gate rejects.** The network
+   session is what keeps the subscription token on the host (egress brokering
+   through `addRequestTransformations`); `harness-auth-contract.test.ts` pins
+   it.
+6. **Model routing memoizes per turn (`ctx.turn?.id`), not per session** —
+   durable sessions mix turn kinds, and a session-keyed memo pins whichever
+   model came first forever.
 7. **Secrets travel only through `session.run`'s env map** — never in command
    strings, prompts, skill files, or logs; even key NAMES go via env (shell
    quoting eats `JSON.stringify` quotes). Redact secret-shaped text in every
@@ -406,7 +433,8 @@ statuses. **The agent is not "done" until a full probe PR passed.**
    orphans a half-created sandbox under that name and reuse 400s forever.
    Sweep on `createSession` failure too.
 9. **eve channel sandbox needs
-   `git config --global --add safe.directory /workspace`** in `onSession`
+   `git config --global --add safe.directory /workspace`** in its
+   `defineSandbox` selector, after `environment.open()`
    (/workspace is uid 1001, commands run as root → "dubious ownership" kills
    every checkout).
 10. **Self-terminate at ~700s with a partial result.** A platform kill loses
@@ -420,18 +448,18 @@ statuses. **The agent is not "done" until a full probe PR passed.**
     otherwise webhooks simply never arrive.
 
 13. **eve's own sandbox template dies silently, and only a build can revive
-    it.** eve provisions it during a build; its snapshot expires on a timer;
-    and eve's in-process repair is gated on local development, so on a
-    deployment the failure is rethrown forever. `/eve/v1/health` keeps
-    answering 200 the whole time while every turn runs without a repo
-    checkout. Renew it on a schedule, fire a Deploy Hook when it is already
-    gone, sweep dead session records (they pin a session to a sandbox that
-    cannot resume), and probe it externally. `stop()` alone does NOT give a
-    template a fresh TTL — only `snapshot({expiration})` +
-    `update({currentSnapshotId})` does.
-14. **Channels steer by default; queue instead.** Since eve 0.33 a message
-    arriving mid-turn CANCELS that turn, and completed side effects are not
-    rolled back — a push landing during a long run abandons a booted sandbox.
+    it.** `eve build` records it as a snapshot; the snapshot expires after
+    `SANDBOX_SNAPSHOT_EXPIRATION_MS` without use; and "The runtime never
+    recreates a template. Run `eve build` again and deploy its output" (eve's
+    sandbox troubleshooting doc). `/eve/v1/health` keeps answering 200 the
+    whole time while no new session can open a sandbox. Keep the TTL long
+    enough to cover your quietest week, probe it externally
+    (`sandbox-health.yml`), and redeploy when it alerts. Never fire a deploy
+    hook from a routine warm.
+14. **Channels steer by default; queue instead.** With eve's default
+    `turnPolicy: "steer"`, a message arriving mid-turn CANCELS that turn, and
+    completed side effects are not rolled back — a push landing during a long
+    run abandons a booted sandbox.
     Set `turnPolicy: "queue"` and keep `progress: { reactions: true }` so the
     👀 acknowledgement stops people from re-posting a command that is already
     running.
@@ -456,10 +484,12 @@ Do not declare setup complete until every box checks:
 - [ ] An injection-style probe comment was reported, not obeyed.
 - [ ] `ANTHROPIC_AUTH_TOKEN` set (Sensitive) and its ~1-year expiry date
       recorded where a human will see it.
-- [ ] `warm_sandbox` reports `ready: true`; a probe `run_dev_task` returned a
+- [ ] `warm_sandbox` reports `warmed: true`; a probe `run_dev_task` returned a
       structured `ok` result through the real channel.
 - [ ] Sandbox/snapshot inventory at steady state after a run + maintenance
-      pass (1 template + ≤2 template snapshots + nothing else).
+      pass (1 harness template sandbox + 1 template snapshot + zero fork
+      snapshots; eve's own build-time template snapshot and per-session
+      sandboxes and snapshots are eve-managed and healthy; nothing else).
 - [ ] Daily maintenance schedule live with the intended cron.
 - [ ] External health-check workflow green with alert email configured in
       Actions secrets.

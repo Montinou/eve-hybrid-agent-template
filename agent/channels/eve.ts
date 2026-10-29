@@ -9,7 +9,8 @@ import { localDev, vercelOidc } from "eve/channels/auth";
 //
 // Routes it exposes (see node_modules/eve/docs/channels/eve.mdx):
 //   GET  /eve/v1/health                      always public
-//   GET  /eve/v1/info
+//   GET  /eve/v1/info                        operator principals only (service,
+//                                            runtime, or localDev()); others get 403
 //   POST /eve/v1/session                     start a session
 //   POST /eve/v1/session/:id                 follow-up message
 //   POST /eve/v1/session/:id/cancel          cancel the in-flight turn
@@ -19,7 +20,7 @@ import { localDev, vercelOidc } from "eve/channels/auth";
 // and Vercel-internal callers only; they never admit browser users or
 // external clients in production. For a public app, prepend your own AuthFn
 // (Clerk, Auth.js, an API-key verifier, your OIDC/JWT check) to this list.
-// See node_modules/eve/docs/guides/auth-and-route-protection.
+// See node_modules/eve/docs/guides/auth-and-route-protection.md.
 export default eveChannel({
   auth: [vercelOidc(), localDev()],
   // Enable CORS only if a browser frontend calls this channel directly:

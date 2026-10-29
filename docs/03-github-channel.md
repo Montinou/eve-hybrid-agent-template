@@ -31,6 +31,8 @@ Inbound hooks return `{ auth }` to start a turn, or `null` to ignore the event. 
 ```ts
 export default githubChannel({
   botName: BOT_NAME,
+  progress: { reactions: true },
+  turnPolicy: "queue",   // section 7
   onComment: onCommentDispatch,
   onPullRequest: onPullRequestDispatch,
 });
@@ -118,24 +120,15 @@ vercel deploy --prod    # wait ~100s for the build
 4. **Attributes path:** once phase 4's tools exist, they will read the PR attributes; for now you can assert them in unit tests:
 
    ```bash
-   pnpm test -- dispatch
+   pnpm test dispatch
    ```
 
-## Verification
-
-Do not proceed to phase 3 until every box checks:
-
-- [ ] `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` (Sensitive), `GITHUB_WEBHOOK_SECRET` (Sensitive) set on the Vercel project.
-- [ ] App webhook URL = `https://<deployment>/eve/v1/github`; events include `pull_request`, `issue_comment`, `pull_request_review_comment`.
-- [ ] App installed on the probe repo (checked explicitly — silence is not evidence).
-- [ ] `pnpm test` passes, including the dispatch unit tests.
-- [ ] Probe PR event: delivery 200 in Recent Deliveries.
-## Turn policy: queue, don't steer
+## 7. Turn policy: queue, don't steer
 
 `githubChannel` is configured with **`turnPolicy: "queue"`** and
 **`progress: { reactions: true }`**. Both are deliberate.
 
-Since eve 0.33 the channel default is `"steer"`: a message arriving during an
+The eve channel default is `"steer"`: a message arriving during an
 active turn **cancels that turn** and starts a replacement, and *"completed
 side effects are not rolled back"*. For an agent whose turns hold an 8-vCPU
 sandbox for minutes, that is destructive — a push landing mid-run abandons a
@@ -154,8 +147,17 @@ gate, so declare it rather than inherit it.
 or review thread. So `"queue"` serializes turns *within one thread only*; other
 PRs keep running concurrently. Within one PR, comment turns and PR-event turns
 share the session, which is exactly why the model resolver in `agent/agent.ts`
-is keyed on `turn.started` rather than `session.started`.
+is memoized per turn (`ctx.turn?.id`) rather than per session.
 
+## Verification
+
+Do not proceed to phase 3 until every box checks:
+
+- [ ] `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` (Sensitive), `GITHUB_WEBHOOK_SECRET` (Sensitive) set on the Vercel project.
+- [ ] App webhook URL = `https://<deployment>/eve/v1/github`; events include `pull_request`, `issue_comment`, `pull_request_review_comment`.
+- [ ] App installed on the probe repo (checked explicitly — silence is not evidence).
+- [ ] `pnpm test` passes, including the dispatch unit tests.
+- [ ] Probe PR event: delivery 200 in Recent Deliveries.
 - [ ] Probe `@bot` comment: `eyes` reaction + bot reply comment.
 - [ ] Untagged comment: no reaction, no session.
 

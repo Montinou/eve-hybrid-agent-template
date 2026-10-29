@@ -14,7 +14,11 @@ cd {{AGENT_NAME}}
 pnpm install
 ```
 
-pnpm is not optional here: [`package.json`](../package.json) pins `resolutions` for the `ai` package that the harness stack depends on, and the lockfile encodes a version set (`eve` + `ai` + `@ai-sdk/harness*` + `@vercel/sandbox`) that is known to work together. Don't regenerate it with another package manager.
+pnpm is not optional here: [`pnpm-workspace.yaml`](../pnpm-workspace.yaml) pins `overrides` for the `ai` package that the harness stack depends on (pnpm 12 ignores `resolutions` in `package.json`), and the lockfile encodes a version set (`eve` + `ai` + `@ai-sdk/harness*` + `@vercel/sandbox`) that is known to work together. Don't regenerate it with another package manager.
+
+pnpm 12 also refuses to install any version published less than 24 hours ago (`minimumReleaseAge`, built-in default 1440 minutes), even from the lockfile. If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, never bypass the hold (no `minimumReleaseAgeExclude` list, no lowered `minimumReleaseAge`, nothing committed to get around it), wait until that release is 24 hours old and re-run ([docs/07-ops.md](07-ops.md), "Staying current").
+
+`pnpm-workspace.yaml` holds the pnpm settings that live outside `package.json`: `allowBuilds: { esbuild: false }` (pnpm 12 fails the install on any dependency build script that is not approved, and esbuild's is not needed) and the `ai` override above.
 
 ## 2. Orient yourself in the tree
 
@@ -31,8 +35,8 @@ agent/
 ├── tools/              run_dev_task, warm_sandbox             (phase 4)
 ├── schedules/          daily template maintenance             (phase 5)
 └── lib/                ALL real logic: pure, unit-tested
-scripts/                build post-processing (read on!)
-evals/                  routing evals
+scripts/                build post-processing, hashing, the orchestrate CLI
+evals/                  delegation and routing evals (docs/10-evals.md)
 docs/                   you are here
 ```
 
@@ -49,7 +53,7 @@ pnpm typecheck
 pnpm test
 ```
 
-Both must pass on a fresh clone — if they don't, stop and fix your environment before blaming the code.
+Both must pass on a fresh clone — if they don't, stop and fix your environment before blaming the code. `pnpm test` includes a docs-accuracy test that checks the scripts, paths and versions the docs name, and the environment variable names they use (names with at least one underscore): a whole inline code span (`NAME` or `NAME=value`) and, inside code (fenced blocks and inline spans), a `NAME=` assignment (including `export NAME=`), `vercel env add|rm|update NAME`, `process.env.NAME` / `process.env["NAME"]`, or `$NAME` / `${NAME}`. Each name must appear in `.env.example`, in the non-test code under `agent/`, `scripts/`, `.github/` or `evals/`, or in the test's short allow-list of external names; bare names in prose or diagrams are not checked. The evals are separate: `pnpm eval --list` shows them without running anything, and running them needs a decision described in [docs/10-evals.md](10-evals.md).
 
 For local model calls the loop needs Gateway auth (see [docs/01-prerequisites.md](01-prerequisites.md) §3). Copy [`.env.example`](../.env.example) to `.env.local` and set either `AI_GATEWAY_API_KEY`, or link the project first (step 5) and run `vercel env pull`. Then:
 
@@ -78,14 +82,14 @@ Look at the build script in [`package.json`](../package.json):
 
 **Never run bare `eve build` for a deployment of this template.** Here's why (gotcha #2, found in production):
 
-- The dev-agent runs Claude Code through `@ai-sdk/harness-claude-code`, whose sandbox *bridge* consists of code **plus data files** (`package.json`, `pnpm-lock.yaml`, `index.mjs`) that it loads at runtime relative to the bundled module.
+- The dev-agent runs Claude Code through `@ai-sdk/harness-claude-code`, whose sandbox *bridge* consists of code **plus data files** (`package.json`, `pnpm-lockfile.yaml`, `pnpm-workspace.yaml`, `index.mjs`) that it loads at runtime relative to the bundled module.
 - eve's bundler inlines the bridge's **code** but does not copy its **data files**. The bundle builds green, deploys green, and then every dev-agent run dies at runtime with `ENOENT` when the bridge tries to read its assets.
-- [`scripts/copy-bridge-assets.mjs`](../scripts/copy-bridge-assets.mjs) fixes this after `eve build`, and it must handle **both** output trees, because only one of them actually deploys depending on where the build runs:
-  - `.vercel/output/functions/*.func/_libs` — the Vercel Build Output tree, produced on hosted builds (when the `VERCEL` env var is set). The `.func` dir is what becomes `/var/task` at runtime. On hosted builds the script *hard-fails* if this tree exists without a `_libs` dir — a deployable bundle without bridge assets must never ship.
-  - `.output/server/_libs` — the local/self-host Nitro tree from a plain `eve build`.
+- [`scripts/copy-bridge-assets.mjs`](../scripts/copy-bridge-assets.mjs) fixes this after `eve build`. It finds every bundled module that loads the bridge (each resolves `./bridge/<asset>` against its own directory: `_chunks/` in the current eve build, `_libs/` in older ones) and copies the assets beside it. It must handle **both** output trees, because only one of them actually deploys depending on where the build runs:
+  - `.vercel/output/functions/*.func/` — the Vercel Build Output tree, produced on hosted builds (when the `VERCEL` env var is set). The `.func` dir is what becomes `/var/task` at runtime. On hosted builds the script *hard-fails* if this tree exists without a module that loads the bridge — a deployable bundle without bridge assets must never ship.
+  - `.output/server/` — the local/self-host Nitro tree from a plain `eve build`; the script fails here too when no module loads the bridge.
 - The same pass patches the server function's `maxDuration` to **800** in `.vc-config.json`: eve sets the workflow function to the max but leaves the server function at the 300s default, which would strangle channel-side turns.
 
-Vercel runs `pnpm build` (the whole script) on hosted builds, so as long as you never change that script line, you're covered. If you ever see `ENOENT ... _libs/bridge/...` in production logs, someone changed it.
+Vercel runs `pnpm build` (the whole script) on hosted builds, so as long as you never change that script line, you're covered. If you ever see `ENOENT ... bridge/...` in production logs, someone changed it, or the bundle layout moved in a way the script did not detect.
 
 ## 5. Link and deploy
 

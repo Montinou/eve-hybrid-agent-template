@@ -31,29 +31,50 @@ import { BOT_NAME } from "#lib/dispatch.ts";
 // agent/lib/dispatch.test.ts — keep behavior there whenever possible; evals
 // are for what only the live loop can prove.
 //
-// Cost note: the first case really calls the run_dev_task tool on the target
-// agent. The tool is never-throw — with the dev-agent unconfigured it returns
-// a structured `failed` result, so `calledTool` still gates correctly — but
-// against a fully configured deployment it boots a real sandboxed dev-agent
-// run. Run `eve eval` deliberately, not on every push.
+// Cost note: the command case STUBS run_dev_task (eve tool stubs,
+// node_modules/eve/docs/evals/tool-stubs.mdx), so it boots no sandboxed
+// dev-agent: the stub removes that cost and each case costs one orchestrator
+// turn (the greeting case expects no tool call at all). Tool replacement is
+// denied by default: the target's eve channel must permit it for the eval
+// runner (allowToolStubs; docs/10-evals.md), and agent/channels/eve.ts does
+// not. Both cases are tagged `fast`; `live` is reserved for evals that
+// exercise the real tool, and `pnpm eval` excludes it.
 // ---------------------------------------------------------------------------
 
 export default [
   defineEval({
     description:
       "GATE: a mention command routes to the run_dev_task capability tool.",
+    tags: ["fast"],
     async test(t) {
+      const session = await t.session({
+        stubs: [
+          {
+            id: "dev",
+            tool: "run_dev_task",
+            outcome: {
+              response: {
+                status: "ok",
+                summary: "stubbed-result",
+                capability: "task",
+              },
+            },
+          },
+        ],
+      });
       // CUSTOMIZE: keep this message in sync with your command grammar
       // (agent/lib/dispatch.ts) and command→tool table (agent/instructions.md).
-      await t.send(`@${BOT_NAME} run`);
-      // Run-level assertions gate by default; .gate() makes it explicit.
-      t.succeeded().gate();
-      t.calledTool("run_dev_task").gate();
+      const turn = await session.send(`@${BOT_NAME} run`);
+      // Scoped (turn, session and run) assertions gate by default; .gate()
+      // makes it explicit.
+      turn.succeeded().gate();
+      turn.calledTool("run_dev_task").gate();
     },
   }),
   defineEval({
     description:
       "GATE: a plain greeting must NOT trigger the expensive dev-agent capability.",
+    tags: ["fast"],
     async test(t) {
       await t.send("Hello!");
       t.succeeded().gate();

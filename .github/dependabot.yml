@@ -1,0 +1,32 @@
+# Keeps the template from going stale (docs/07-ops.md, "Staying current").
+# One weekly PR per ecosystem (every npm dependency in one group, every GitHub
+# Action in another); run `pnpm typecheck && pnpm test && pnpm build` on it
+# (README.md, "Upgrading eve") before merging. When the PR changes the `ai`
+# range, also change the `ai` override in pnpm-workspace.yaml to match
+# (docs/07-ops.md, "Staying current"): Dependabot does not edit that file.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # pnpm 12 refuses to install a version published under 24 h ago
+    # (`minimumReleaseAge`, docs/07-ops.md "Staying current"): do not propose
+    # one that new. Version updates only; security updates are not delayed.
+    cooldown:
+      default-days: 1
+    groups:
+      # One group for every npm dependency: eve, the AI SDK and the Vercel
+      # packages move together (a bump of one usually needs the matching bump
+      # of the others), so they must land in the same PR as everything else.
+      npm:
+        patterns:
+          - "*"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"

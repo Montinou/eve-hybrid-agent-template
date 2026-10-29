@@ -27,6 +27,10 @@ describe("isHarnessTemplateName", () => {
     expect(isHarnessTemplateName("ai-sdk-harness-abcdef1234567890")).toBe(true);
   });
 
+  it("matches the @ai-sdk/sandbox-vercel 1.0.168 template name (ai-sdk-harness-v3-<hex24>)", () => {
+    expect(isHarnessTemplateName("ai-sdk-harness-v3-0123456789abcdef01234567")).toBe(true);
+  });
+
   it("excludes a forked per-session sandbox name", () => {
     expect(isHarnessTemplateName("ai-sdk-harness-session-dev-task-example-app-abc")).toBe(
       false,

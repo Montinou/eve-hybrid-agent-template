@@ -39,7 +39,7 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 | `GITHUB_APP_INSTALLATION_ID` | git creds | optional; auto-discovered otherwise |
 | `GITHUB_TOKEN` | git creds | optional PAT fallback |
 | `DEV_AGENT_TIME_BUDGET_MS` | dev-agent | 700000; hard-clamped to 750000 in code |
-| `SANDBOX_IDLE_TIMEOUT_MS` | eve channel sandbox | 300000 (5 min) |
+| `SANDBOX_TIMEOUT_MS` | eve channel sandbox | 1800000 (30 min); a hard lifetime, floored at 800000; `SANDBOX_IDLE_TIMEOUT_MS` still accepted as an alias |
 | `SANDBOX_SNAPSHOT_EXPIRATION_MS` | eve channel sandbox | 7 days |
 | `TEMPLATE_SNAPSHOT_EXPIRATION_MS` | harness template | 7 days — **distinct lifecycle** from the previous knob |
 | `RECIPE_VERSION` | harness template | bump on any sandbox-recipe change |
@@ -92,6 +92,12 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
       routing hints; the prompt's Skills section lists exactly these
 - [ ] Command→tool mapping in the prompt matches `dispatch.ts` attributes
 - [ ] Loop models chosen (`ORCHESTRATOR_MODEL` / `COMMAND_MODEL`) or defaults kept
+- [ ] Evals reviewed ([docs/10-evals.md](10-evals.md)): the mention
+      command in `evals/routing.eval.ts` and `evals/delegation.eval.ts` matches
+      your command grammar; `pnpm eval --list` shows the suite. Running the stubbed evals
+      needs the `allowToolStubs` grant, which the shipped
+      `agent/channels/eve.ts` does not give: decide, with your owner, whether and
+      where to grant it before you rely on them
 - [ ] `pnpm hash-instructions` re-run and hash committed
 - [ ] **Gate:** probe comment gets a reply following the output contract; command
       turns run on the command model (check the Gateway dashboard)
@@ -118,42 +124,47 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
   - [ ] Per-repo forbidden zones in the per-repo skill markdown (tunable without
         a redeploy)
   - [ ] PRs open as **drafts**; no merge tool exists anywhere in the agent
-- [ ] **Gate:** `warm_sandbox` returns `ready: true`; a real `run_dev_task` probe
+- [ ] **Gate:** `warm_sandbox` returns `warmed: true`; a real `run_dev_task` probe
       returns a structured result on the PR
 
 ## Phase 5 — Lifecycle + cost hygiene ([docs/06-sandbox-lifecycle.md](06-sandbox-lifecycle.md))
 
-- [ ] Sandbox knobs reviewed (defaults are sane); `keepLastSnapshots` still
-- [ ] `EVE_DEPLOY_HOOK_URL` set to a production-branch Deploy Hook — the
-      only supported way to reprovision eve's own template once its snapshot
-      lapses (docs/06-sandbox-lifecycle.md)
+- [ ] Sandbox knobs reviewed (defaults are sane); dev-agent forks still
+      created with `persistent: false`
 - [ ] Daily `template-maintenance` schedule deployed and observed running:
-      its `eve` result must report `healthy: true`
-- [ ] Weekly job (if you have one) calls `warm_sandbox` with `deep: true`
+      it must report `warmed: true`
+- [ ] `.github/workflows/sandbox-health.yml` configured; you know the repair
+      for a lapsed eve template is a redeploy (docs/06-sandbox-lifecycle.md)
 - [ ] `SANDBOX_SNAPSHOT_EXPIRATION_MS` NOT shortened to "save storage" —
-      it governs the template too, and a short TTL turns a quiet week into
-      an outage
-      `{ count: 2 }`; fork-teardown patch untouched
+      it governs eve's build-time template snapshot too, and a short TTL
+      turns a quiet week into an outage
 - [ ] `agent/schedules/template-maintenance.md` cron set to a suitable slot
       (Vercel evaluates schedule crons in UTC)
 - [ ] `RECIPE_VERSION` set; bumped after any recipe edit you made in phase 4
 - [ ] **Gate:** double-warm is a fast no-op; 30 min after a real run the
       sandbox/snapshot inventory matches the steady state
-      (1 template + ≤2 template snapshots + nothing lingering)
+      (1 harness template sandbox + 1 template snapshot + zero fork snapshots;
+      eve's own build-time template snapshot and per-session sandboxes and
+      snapshots are eve-managed and healthy, docs/06-sandbox-lifecycle.md;
+      nothing else lingering)
 
 ## Phase 6 — Ops ([docs/07-ops.md](07-ops.md))
 
 - [ ] All env vars from the table above set in Vercel; secrets Sensitive
-- [ ] CI green (typecheck + vitest + instructions-hash gate)
+- [ ] CI green (typecheck + vitest + a build with no deprecation notice +
+      instructions-hash gate)
 - [ ] `EVE_HEALTH_URL` repo variable set; health-check workflow dispatched
-- [ ] `sandbox-health.yml` enabled with `secrets.AGENT_API_KEY` — health
-      pings alone cannot see a dead sandbox
+- [ ] `sandbox-health.yml` enabled with `secrets.AGENT_API_KEY` (a bearer
+      token your eve channel accepts: add an API-key verifier to
+      `agent/channels/eve.ts` first, docs/07-ops.md) — health pings alone
+      cannot see a dead sandbox
 - [ ] `harness-auth-contract.test.ts` kept and its version pin current —
       it is the only guard against a dependency bump silently moving
       billing from your subscription to the AI Gateway
 - [ ] Branch validated against its protected preview with
       `EVE_BYPASS_TOKEN` before merging any dependency bump
-      manually once and green; Resend alert configured (or consciously skipped)
+- [ ] Health-check workflow dispatched manually once and green; Resend alert
+      configured (or consciously skipped)
 - [ ] `ANTHROPIC_AUTH_TOKEN` rotation date in a human calendar
 - [ ] **Gate:** the E2E probe PR — every capability exercised through the real
       channel; expect to fix a few real bugs here (the reference found three)
@@ -162,14 +173,15 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 
 - [ ] MCP connection(s) for external data
 - [ ] Blob journal (`recall`/`remember`) + weekly digest schedule
-- [ ] Evals grown from incidents
+- [ ] Evals grown from incidents, `live` evals added only where stubs cannot
+      prove the behavior ([docs/10-evals.md](10-evals.md))
 - [ ] Agent-sent email reports
 
 ## Definition of done
 
 The agent is DONE when all of the following hold simultaneously:
 
-1. **Green pipeline:** CI (typecheck, tests, hash gate) passes; deploy goes
+1. **Green pipeline:** CI (typecheck, tests, a build with no deprecation notice, hash gate) passes; deploy goes
    through `pnpm build`; health endpoint returns 200 from the external probe.
 2. **E2E proof:** one probe PR exercised every capability through the real
    GitHub channel and produced a PR comment matching the output contract, with
@@ -180,7 +192,9 @@ The agent is DONE when all of the following hold simultaneously:
 4. **Injection proof:** a PR embedding hostile instructions was ignored and the
    normal task ran.
 5. **Cost steady state:** 24 h after the probe, the sandbox inventory is exactly
-   1 template + ≤2 template snapshots + eve-managed channel snapshots, nothing
+   1 harness template sandbox + 1 template snapshot + zero fork snapshots, plus
+   eve's own build-time template snapshot and its per-session sandboxes and
+   snapshots (eve-managed and healthy, `docs/06-sandbox-lifecycle.md`), nothing
    else; the daily maintenance schedule has run at least once.
 6. **No placeholders left:** `git grep -n '{{'` over docs you customized returns
    only intentional examples; `git grep -n 'CUSTOMIZE:'` returns only markers you
