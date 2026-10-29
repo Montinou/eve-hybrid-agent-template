@@ -259,11 +259,11 @@ pnpm build && vercel deploy --prod   # NEVER bare eve build
 ```
 
 Then warm the template out-of-band (probe comment or eve message invoking the
-`warm_sandbox` tool) and repeat until it reports `ready: true` — a cold
+`warm_sandbox` tool) and repeat until it reports `warmed: true` — a cold
 template build takes minutes and must never happen in the request path.
 Finally, run a `run_dev_task` probe through the real channel.
 
-**Verification gate:** `warm_sandbox` returns `ready: true`, AND a probe
+**Verification gate:** `warm_sandbox` returns `warmed: true`, AND a probe
 `run_dev_task` returns a structured result (`status: ok`, non-empty summary)
 posted back as a comment — not a thrown error, not free text. **Do not proceed
 until a full probe run completes.**
@@ -393,10 +393,11 @@ statuses. **The agent is not "done" until a full probe PR passed.**
    `stop()` mints a full-size snapshot that `delete()` does NOT cascade-remove —
    pure waste for a throwaway fork. `buildDevSandboxCreateOptions()` in
    `dev-agent.ts` sets it, and the dev-agent destroys every fork it creates.
-5. **Build forks with `createVercelNetworkSandboxSession`, not the deprecated
-   `createVercelSandbox`.** The network session is what keeps the subscription
-   token on the host (egress brokering through `addRequestTransformations`);
-   `harness-auth-contract.test.ts` pins it.
+5. **Build forks with `createVercelNetworkSandboxSession`, never with the
+   plain sandbox constructor the removed-API gate rejects.** The network
+   session is what keeps the subscription token on the host (egress brokering
+   through `addRequestTransformations`); `harness-auth-contract.test.ts` pins
+   it.
 6. **Model routing memoizes per turn (`ctx.turn?.id`), not per session** —
    durable sessions mix turn kinds, and a session-keyed memo pins whichever
    model came first forever.
@@ -431,9 +432,10 @@ statuses. **The agent is not "done" until a full probe PR passed.**
     enough to cover your quietest week, probe it externally
     (`sandbox-health.yml`), and redeploy when it alerts. Never fire a deploy
     hook from a routine warm.
-14. **Channels steer by default; queue instead.** Since eve 0.33 a message
-    arriving mid-turn CANCELS that turn, and completed side effects are not
-    rolled back — a push landing during a long run abandons a booted sandbox.
+14. **Channels steer by default; queue instead.** With eve's default
+    `turnPolicy: "steer"`, a message arriving mid-turn CANCELS that turn, and
+    completed side effects are not rolled back — a push landing during a long
+    run abandons a booted sandbox.
     Set `turnPolicy: "queue"` and keep `progress: { reactions: true }` so the
     👀 acknowledgement stops people from re-posting a command that is already
     running.
@@ -458,10 +460,11 @@ Do not declare setup complete until every box checks:
 - [ ] An injection-style probe comment was reported, not obeyed.
 - [ ] `ANTHROPIC_AUTH_TOKEN` set (Sensitive) and its ~1-year expiry date
       recorded where a human will see it.
-- [ ] `warm_sandbox` reports `ready: true`; a probe `run_dev_task` returned a
+- [ ] `warm_sandbox` reports `warmed: true`; a probe `run_dev_task` returned a
       structured `ok` result through the real channel.
 - [ ] Sandbox/snapshot inventory at steady state after a run + maintenance
-      pass (1 template + ≤2 template snapshots + nothing else).
+      pass (1 harness template sandbox + 1 template snapshot + zero fork
+      snapshots + nothing else).
 - [ ] Daily maintenance schedule live with the intended cron.
 - [ ] External health-check workflow green with alert email configured in
       Actions secrets.

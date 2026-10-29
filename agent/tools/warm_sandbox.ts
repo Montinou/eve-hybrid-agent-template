@@ -12,9 +12,9 @@ import { warmSandboxTemplate } from "#lib/dev-agent.ts";
 // snapshots left behind by a prior recipe version — see
 // agent/lib/template-sweep.ts.
 //
-// eve's OWN sandbox template is not this tool's business. Under eve 0.89
-// `eve build` records it as a snapshot in the build artifact and the runtime
-// creates session sandboxes from that snapshot ID
+// eve's OWN sandbox template is not this tool's business. `eve build` records
+// it as a snapshot in the build artifact and the runtime creates session
+// sandboxes from that snapshot ID
 // (node_modules/eve/docs/sandbox/vercel.mdx §Snapshot preparation); "The
 // runtime never recreates a template. Run `eve build` again and deploy its
 // output" (sandbox/troubleshooting.mdx). So the repair for a lapsed eve

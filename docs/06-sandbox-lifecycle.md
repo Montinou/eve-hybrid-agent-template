@@ -90,7 +90,7 @@ what lets it lapse. If your agent can sit idle that long, raise
 and rely on [`.github/workflows/sandbox-health.yml`](../.github/workflows/sandbox-health.yml)
 ([docs/07-ops.md](07-ops.md)) to tell you when a redeploy is needed.
 
-Why this matters (observed live under eve 0.44): an agent's
+Why this matters (observed live in the reference deployment): an agent's
 `SANDBOX_SNAPSHOT_EXPIRATION_MS` was 24 h, its last deploy was a Tuesday, and
 from Thursday onward **not one sandbox was created for twelve days**.
 `/eve/v1/health` answered 200 the entire time. Only the tools needing a

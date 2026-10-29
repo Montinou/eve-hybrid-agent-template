@@ -33,6 +33,11 @@ on:
     - cron: "0 8 * * *"
   workflow_dispatch:
 
+# Least privilege: the job only checks out the repository to run
+# scripts/orchestrate.mjs.
+permissions:
+  contents: read
+
 jobs:
   sandbox:
     runs-on: ubuntu-latest

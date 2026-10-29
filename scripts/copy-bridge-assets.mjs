@@ -3,7 +3,7 @@
 // in dist/bridge/ — the list readBridgeAsset() maps in the package's
 // dist/index.js), which readBridgeAsset()
 // loads at runtime relative to the bundled module that contains it
-// (e.g. /var/task/_chunks/bridge/ under eve 0.89).
+// (e.g. /var/task/_chunks/bridge/ in the current eve build).
 // Without this step, any harness-backed tool fails at runtime with ENOENT.
 // That's why the build script is `eve build && node scripts/copy-bridge-assets.mjs`
 // — NEVER bare `eve build` (gotcha 2 in the hybrid-agent pattern).
@@ -50,8 +50,8 @@ if (!existsSync(src)) {
 // Every bundled module that loads the bridge resolves `./bridge/<asset>`
 // against its OWN directory (`new URL("./bridge/...", import.meta.url)` in
 // @ai-sdk/harness-claude-code's dist/index.js), so the assets must sit beside
-// each such module — wherever the bundler put it. eve 0.44 bundled it under
-// `_libs/`; eve 0.89 inlines it into `_chunks/node-server.mjs`. Locating the
+// each such module — wherever the bundler put it. Older eve builds put it under
+// `_libs/`; the current one inlines it into `_chunks/node-server.mjs`. Locating the
 // referencing modules instead of hard-coding a directory survives the next
 // bundler layout change.
 const BRIDGE_ASSETS = ["package.json", "pnpm-lockfile.yaml", "pnpm-workspace.yaml", "index.mjs"];

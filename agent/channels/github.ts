@@ -41,7 +41,7 @@ export default githubChannel({
   // default, but a channel with its own onComment replaces the default
   // mention gate, so declare it rather than inherit it.
   progress: { reactions: true },
-  // eve 0.33 changed the channel default to `turnPolicy: "steer"`: a message
+  // eve's channel default is `turnPolicy: "steer"`: a message
   // arriving during an active turn CANCELS that turn and starts a
   // replacement, and "completed side effects are not rolled back". For an
   // agent whose turns hold a sandbox for minutes that is destructive — a

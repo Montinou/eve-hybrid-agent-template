@@ -70,15 +70,22 @@ go through that script.
 ## Staying current
 
 eve is pre-1.0 and ships breaking changes, so a template that is not updated
-stops building. Two things keep it current:
+stops building. Three things keep it current:
 
 - **A weekly update PR.** [.github/dependabot.yml](../.github/dependabot.yml)
-  opens one grouped PR per week for npm (eve, `ai`, `@ai-sdk/*` and
-  `@vercel/*` move together) and one for GitHub Actions.
+  opens one grouped PR per week for npm (one group holds every dependency, so
+  eve, `ai`, `@ai-sdk/*` and `@vercel/*` always move together) and one for
+  GitHub Actions.
 - **One rule on that PR:** run `pnpm typecheck`, `pnpm test` and `pnpm build`,
   and merge only when all three pass with no deprecation output (CI enforces
   the same). When the PR bumps eve, read the migration notes in
   `node_modules/eve/docs/guides/` for the new version before fixing failures.
+- **One manual step Dependabot does not do:** `pnpm-workspace.yaml` pins the
+  `ai` package under `overrides` (`ai: ^7.0.157`), next to the `ai` dependency
+  in `package.json`. When the PR changes the `ai` range, change the override to
+  the same range in the same PR; otherwise the override keeps forcing the old
+  range on every package that depends on `ai`. Dependabot edits `package.json`
+  and the lockfile only.
 
 A doc or code comment that names a version is fixed in the same PR as the bump
 that makes it stale. A docs-accuracy test is meant to enforce this; until it
@@ -125,9 +132,11 @@ snapshot — exactly the path that fails once that snapshot has expired
 output"*, eve's `sandbox/troubleshooting.mdx`). It alerts when the answer is
 missing *or* unhealthy — "could not confirm" is not "fine" — and the repair is a
 redeploy ([docs/06-sandbox-lifecycle.md](06-sandbox-lifecycle.md)). It needs one
-extra secret beyond the health check's (`AGENT_API_KEY`, the eve channel's
-key), and it is external for the same reason: an agent that cannot open a
-sandbox cannot report that it cannot.
+extra secret beyond the health check's (`AGENT_API_KEY`, a bearer token your
+eve channel must accept: the template's `agent/channels/eve.ts` admits only
+`vercelOidc()` and `localDev()`, so add an API-key verifier there first, as
+the header of `sandbox-health.yml` says), and it is external for the same
+reason: an agent that cannot open a sandbox cannot report that it cannot.
 
 ## Validate a branch against its preview before merging
 

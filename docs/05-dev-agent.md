@@ -324,7 +324,7 @@ next reader will trust it, and the gap is exactly what they would have checked.
   lookups) are all unit-tested without any deploy.
 - Deploy (`pnpm build` first — never bare `eve build`, see
   [docs/07-ops.md](07-ops.md)), call `warm_sandbox` once via a probe comment or the
-  eve dev UI, confirm it returns `{ ready: true }`.
+  eve dev UI, confirm it returns `{ warmed: true, seconds, detail }`.
 - Run a real `run_dev_task` probe on a PR of an enabled estate repo. Confirm the
   PR comment carries a structured section with an honest status, and that a
   deliberately-broken run (e.g. point it at a disabled repo) yields a structured

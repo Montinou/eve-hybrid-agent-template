@@ -135,7 +135,7 @@ Do not proceed to phase 3 until every box checks:
 `githubChannel` is configured with **`turnPolicy: "queue"`** and
 **`progress: { reactions: true }`**. Both are deliberate.
 
-Since eve 0.33 the channel default is `"steer"`: a message arriving during an
+The eve channel default is `"steer"`: a message arriving during an
 active turn **cancels that turn** and starts a replacement, and *"completed
 side effects are not rolled back"*. For an agent whose turns hold an 8-vCPU
 sandbox for minutes, that is destructive — a push landing mid-run abandons a

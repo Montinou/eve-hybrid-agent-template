@@ -26,7 +26,7 @@
 // AND negative overrides all fall back to the default alike.
 
 /**
- * eve 0.89's own default `timeout` for Vercel session sandboxes
+ * eve's own default `timeout` for Vercel session sandboxes
  * (DEFAULT_SANDBOX_TIMEOUT_MS = 18e5 in
  * node_modules/eve/dist/src/execution/sandbox/bindings/vercel.js), and the
  * same 30 minutes @ai-sdk/sandbox-vercel defaults to because "the
@@ -40,8 +40,10 @@ const DEFAULT_SANDBOX_SNAPSHOT_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * The longest single tool call: one Vercel function invocation, whose
  * maxDuration scripts/copy-bridge-assets.mjs sets to 800 seconds. The
- * sandbox lifetime is never resolved below this, so a VM opened for a tool
- * call cannot be terminated while that call is still running.
+ * sandbox lifetime is never resolved below this, so a lifetime is always at
+ * least as long as one tool-call step. It is a floor, not a guarantee: the
+ * lifetime counts from VM start, so a call that begins late in a VM's life can
+ * still be cut off when the VM terminates.
  */
 export const MAX_TOOL_STEP_MS = 800_000;
 
@@ -68,7 +70,7 @@ function resolvePositiveMsOverride(raw: string | undefined, fallback: number): n
  * lost. Hence the floor at MAX_TOOL_STEP_MS, and the 30-minute default,
  * which covers more than two full tool-call steps after the VM starts.
  *
- * Override with SANDBOX_TIMEOUT_MS. The pre-0.89 name SANDBOX_IDLE_TIMEOUT_MS
+ * Override with SANDBOX_TIMEOUT_MS. The earlier name SANDBOX_IDLE_TIMEOUT_MS
  * is still accepted as an alias (it never was an idle timeout);
  * SANDBOX_TIMEOUT_MS wins when both are set.
  */

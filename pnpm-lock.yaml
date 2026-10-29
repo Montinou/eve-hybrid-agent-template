@@ -185,10 +185,10 @@ importers:
         specifier: ^7.0.157
         version: 7.0.157(zod@4.6.7)
       eve:
-        specifier: ^0.89.0
-        version: 0.89.0(ai@7.0.157(zod@4.6.7))(vite@7.3.6(@types/node@24.13.3))
+        specifier: ^0.90.0
+        version: 0.90.0(ai@7.0.157(zod@4.6.7))(vite@7.3.6(@types/node@24.13.3))
       zod:
-        specifier: 4.6.7
+        specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
       '@types/node':
@@ -892,8 +892,8 @@ packages:
   estree-walker@3.0.3:
     resolution: {integrity: sha512-7RUKfXgSMMkzt6ZuXmqapOurLGPPfgj6l9uRZ7lRGolvk0y2yocc35LdcxKC5PQZdn2DMqioAQ2NoWcrTKmm6g==}
 
-  eve@0.89.0:
-    resolution: {integrity: sha512-YjJM/LFrOvhpfMrZwri5U2Gu8l8bfrVTvR31mYg6RCfJjrxE4OWyJf3kE5R5L0l6tlacAMVltTD2XvA8gwvOmw==}
+  eve@0.90.0:
+    resolution: {integrity: sha512-1z707TxmTokVbQAtpoIqoLBaNR0Xy2FY9+KkJLr8kud8JNLyVYqCJt2bpBt3jzRF6sl0Xxt2CG9Ecpa5LsxyHA==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
@@ -1770,7 +1770,7 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.9
 
-  eve@0.89.0(ai@7.0.157(zod@4.6.7))(vite@7.3.6(@types/node@24.13.3)):
+  eve@0.90.0(ai@7.0.157(zod@4.6.7))(vite@7.3.6(@types/node@24.13.3)):
     dependencies:
       ai: 7.0.157(zod@4.6.7)
       nitro: 3.0.260903-beta

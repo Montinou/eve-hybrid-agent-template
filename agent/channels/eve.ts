@@ -9,7 +9,8 @@ import { localDev, vercelOidc } from "eve/channels/auth";
 //
 // Routes it exposes (see node_modules/eve/docs/channels/eve.mdx):
 //   GET  /eve/v1/health                      always public
-//   GET  /eve/v1/info
+//   GET  /eve/v1/info                        operator principals only (service,
+//                                            runtime, or localDev()); others get 403
 //   POST /eve/v1/session                     start a session
 //   POST /eve/v1/session/:id                 follow-up message
 //   POST /eve/v1/session/:id/cancel          cancel the in-flight turn

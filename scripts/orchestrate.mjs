@@ -323,7 +323,7 @@ async function main() {
     const cached = loadSession()
     sessionId = cached.sessionId
     startIndex = cached.streamIndex ?? 0
-    // eve 0.31 replaced continuation tokens with plain ID-addressed sessions:
+    // eve sessions are plain ID-addressed (no continuation tokens):
     // the follow-up body carries only the message, and an unknown or terminal
     // session answers 409 `session_not_active` instead of silently starting a
     // replacement (channels/eve.mdx §"Start and continue a session").

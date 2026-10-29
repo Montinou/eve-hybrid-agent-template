@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 // Post-build check for gotcha 2: @ai-sdk/harness-claude-code loads its bridge
 // data files with `new URL("./bridge/<asset>", import.meta.url)`, so after
 // `eve build` they must sit beside whichever bundled module contains that
-// code (`_chunks/` under eve 0.89, `_libs/` under eve 0.44). These run the
+// code (`_chunks/` in the current eve build, `_libs/` in older ones). These run the
 // real script against a fixture tree.
 
 const SCRIPT = join(
@@ -59,7 +59,7 @@ function addFunc(dir: string, withReferrer: boolean): string {
 }
 
 describe("scripts/copy-bridge-assets.mjs", () => {
-  it("copies the bridge beside the bundled module that loads it (eve 0.89: _chunks)", () => {
+  it("copies the bridge beside the bundled module that loads it (current eve: _chunks)", () => {
     root = fixture("_chunks");
     const result = run(root);
     expect(result.status, result.stderr).toBe(0);

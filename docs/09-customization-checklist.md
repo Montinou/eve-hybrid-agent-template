@@ -137,15 +137,18 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 - [ ] `RECIPE_VERSION` set; bumped after any recipe edit you made in phase 4
 - [ ] **Gate:** double-warm is a fast no-op; 30 min after a real run the
       sandbox/snapshot inventory matches the steady state
-      (1 template + ≤2 template snapshots + nothing lingering)
+      (1 harness template sandbox + 1 template snapshot + zero fork snapshots +
+      nothing lingering)
 
 ## Phase 6 — Ops ([docs/07-ops.md](07-ops.md))
 
 - [ ] All env vars from the table above set in Vercel; secrets Sensitive
 - [ ] CI green (typecheck + vitest + instructions-hash gate)
 - [ ] `EVE_HEALTH_URL` repo variable set; health-check workflow dispatched
-- [ ] `sandbox-health.yml` enabled with `secrets.AGENT_API_KEY` — health
-      pings alone cannot see a dead sandbox
+- [ ] `sandbox-health.yml` enabled with `secrets.AGENT_API_KEY` (a bearer
+      token your eve channel accepts: add an API-key verifier to
+      `agent/channels/eve.ts` first, docs/07-ops.md) — health pings alone
+      cannot see a dead sandbox
 - [ ] `harness-auth-contract.test.ts` kept and its version pin current —
       it is the only guard against a dependency bump silently moving
       billing from your subscription to the AI Gateway
@@ -178,8 +181,8 @@ The agent is DONE when all of the following hold simultaneously:
 4. **Injection proof:** a PR embedding hostile instructions was ignored and the
    normal task ran.
 5. **Cost steady state:** 24 h after the probe, the sandbox inventory is exactly
-   1 template + ≤2 template snapshots + eve-managed channel snapshots, nothing
-   else; the daily maintenance schedule has run at least once.
+   1 harness template sandbox + 1 template snapshot + eve-managed channel
+   snapshots, nothing else; the daily maintenance schedule has run at least once.
 6. **No placeholders left:** `git grep -n '{{'` over docs you customized returns
    only intentional examples; `git grep -n 'CUSTOMIZE:'` returns only markers you
    consciously decided to keep as-is.

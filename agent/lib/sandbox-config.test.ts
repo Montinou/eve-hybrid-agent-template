@@ -13,16 +13,17 @@ describe("sandbox-config.ts", () => {
   it("defaults resolveSandboxTimeoutMs to 30 minutes when neither SANDBOX_TIMEOUT_MS nor SANDBOX_IDLE_TIMEOUT_MS is set", () => {
     // No stubbing here on purpose: this must hold under the real process env
     // (CI sets neither), proving rollback is just "unset the env var".
-    // 30 minutes is eve 0.89's own default for Vercel session sandboxes.
+    // 30 minutes is eve's own default for Vercel session sandboxes.
     expect(resolveSandboxTimeoutMs()).toBe(30 * 60 * 1000);
   });
 
-  it("never lets the sandbox lifetime be shorter than one tool-call step", () => {
+  it("floors the sandbox lifetime at one tool-call step", () => {
     // `timeout` is a hard lifetime (@vercel/sandbox: "Timeout in milliseconds
     // before the sandbox auto-terminates"), not an idle timeout. A tool call
     // runs inside one function invocation capped at maxDuration 800s
-    // (scripts/copy-bridge-assets.mjs), so a lifetime below that could kill
-    // a command mid-call.
+    // (scripts/copy-bridge-assets.mjs), so a lifetime below that could not
+    // even cover one full step. The floor is a minimum, not a guarantee: the
+    // lifetime counts from VM start.
     expect(MAX_TOOL_STEP_MS).toBe(800_000);
     expect(resolveSandboxTimeoutMs()).toBeGreaterThanOrEqual(MAX_TOOL_STEP_MS);
     vi.stubEnv("SANDBOX_TIMEOUT_MS", String(5 * 60 * 1000));

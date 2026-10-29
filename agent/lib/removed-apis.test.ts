@@ -15,6 +15,7 @@ const SKIPPED_DIRS = new Set(["node_modules", ".git", ".output", ".eve", ".nitro
 
 function listFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
+  if (statSync(dir).isFile()) return [dir];
   const files: string[] = [];
   for (const name of readdirSync(dir)) {
     if (SKIPPED_DIRS.has(name)) continue;
@@ -25,6 +26,7 @@ function listFiles(dir: string): string[] {
   return files;
 }
 
+// Entries may be directories (walked) or single files (e.g. README.md).
 function filesUnder(dirs: string[], extension?: string): string[] {
   return dirs
     .flatMap((dir) => listFiles(join(ROOT, dir)))
@@ -45,6 +47,35 @@ function offenders(files: string[], patterns: RegExp[]): string[] {
   return found;
 }
 
+// Helpers eve's pre-1.0 cleanup moved under `eve/experimental/...`
+// (node_modules/eve/docs/guides/prepare-for-1-0.md, "Move experimental
+// imports"). A file that names one of them without importing from an
+// `eve/experimental/` entry is still using the old location.
+const MOVED_TO_EXPERIMENTAL = [
+  /\bdefineWorkspaceAgent\b/,
+  /\bWorkspaceAgentDefinition\b/,
+  /\bWorkspaceAgentTransport\b/,
+  /\bJustBashCommand\b/,
+  /\bJustBashFilesystem\b/,
+  /\brunDiscordGatewayRelay\b/,
+];
+
+function movedWithoutExperimentalImport(files: string[]): string[] {
+  const found: string[] = [];
+  for (const file of files) {
+    const text = readFileSync(file, "utf8");
+    if (text.includes("eve/experimental/")) continue;
+    for (const pattern of MOVED_TO_EXPERIMENTAL) {
+      if (pattern.test(text)) {
+        found.push(
+          `${relative(ROOT, file)} uses ${pattern} without an eve/experimental import`,
+        );
+      }
+    }
+  }
+  return found;
+}
+
 describe("removed eve APIs", () => {
   it("no source file uses an API removed by eve's pre-1.0 cleanup", () => {
     const removed = [
@@ -52,8 +83,12 @@ describe("removed eve APIs", () => {
       /thresholdPercent/,
       /streamReconnectPolicy/,
       /experimental_runDiscordGatewayRelay/,
+      /from\s+["']eve\/channels\/discord\/gateway["']/,
     ];
-    expect(offenders(filesUnder(["agent", "evals"], ".ts"), removed)).toEqual([]);
+    const sources = filesUnder(["agent", "evals"], ".ts");
+    expect(sources.length).toBeGreaterThan(0);
+    expect(offenders(sources, removed)).toEqual([]);
+    expect(movedWithoutExperimentalImport(sources)).toEqual([]);
 
     // A sandbox is declared by `agent/sandbox.ts` OR an `agent/sandbox/`
     // directory, never both.
@@ -69,7 +104,14 @@ describe("removed eve APIs", () => {
       /TODO verify/,
       /FIXME verify/,
     ];
-    const files = filesUnder(["agent", "evals", "scripts", "docs"]);
+    const files = filesUnder([
+      "agent",
+      "evals",
+      "scripts",
+      "docs",
+      ".claude",
+      "README.md",
+    ]);
     expect(files.length).toBeGreaterThan(0);
     expect(offenders(files, markers)).toEqual([]);
   });

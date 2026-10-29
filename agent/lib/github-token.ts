@@ -13,9 +13,9 @@ import { enabledRepos } from "./estate.ts";
 // eve's own helper (`createGitHubInstallationToken`) is NOT importable outside
 // the channel: the public `eve/channels/github` entry re-exports only the auth
 // *types*, and the deep dist path is blocked by the package `exports` map
-// (re-verified against eve 0.31.x: the entry exports only `githubChannel`,
-// `defaultGitHubAuth`, `GitHubApiError` and `GITHUB_DEFAULT_EXCLUDED_DIFF_FILES`,
-// and a deep import still fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`). So we
+// (checked against the installed eve: the entry's runtime exports are
+// `githubChannel`, `defaultGitHubAuth`, `githubContinuationToken` and
+// `GitHubApiError`, and a deep import fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`). So we
 // replicate the mechanism here — RS256 JWT →
 // POST /app/installations/{id}/access_tokens, discovering the installation id
 // via GET /repos/{owner}/{repo}/installation.

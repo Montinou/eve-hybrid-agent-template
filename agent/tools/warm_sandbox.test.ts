@@ -14,8 +14,9 @@ describe("warm_sandbox", () => {
     warmSandboxTemplate.mockReset();
     vi.stubGlobal("fetch", fetchSpy);
     // A deploy hook configured from an older version of this template must
-    // never be fired by the warm (eve 0.89: "The runtime never recreates a
-    // template"; repair is a redeploy, not a hook per warm).
+    // never be fired by the warm (eve's sandbox troubleshooting doc: "The
+    // runtime never recreates a template"; repair is a redeploy, not a hook
+    // per warm).
     vi.stubEnv("EVE_DEPLOY_HOOK_URL", "https://example.invalid/deploy-hook");
   });
 

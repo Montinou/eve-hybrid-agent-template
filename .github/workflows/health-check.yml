@@ -13,6 +13,8 @@ on:
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
+# Least privilege: the job only calls curl; it never touches the repository.
+permissions: {}
 jobs:
   ping:
     runs-on: ubuntu-latest
