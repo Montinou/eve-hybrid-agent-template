@@ -11,7 +11,7 @@ import { Sandbox, Snapshot } from "@vercel/sandbox";
 // The old named sandbox and its snapshots then orphan forever unless swept:
 // `vercel sandbox remove <name>` does not reliably cascade-delete that
 // sandbox's own snapshots (observed still `created`, not `deleted`, minutes
-// after removal in the reference deployment), so this module explicitly
+// after removal), so this module explicitly
 // deletes snapshots via the SDK before deleting the sandbox itself.
 //
 // Why "current" is identified by RECENCY, not by an exact name/identity
@@ -272,8 +272,8 @@ async function deleteSnapshotsForSandbox(
  * `sandbox.stop()` THEN `sandbox.delete()`
  * (node_modules/@ai-sdk/sandbox-vercel/src/vercel-network-sandbox-session.ts).
  * On a PERSISTENT sandbox `stop()` mints a full-size (multi-GB) snapshot
- * that `delete()` does NOT cascade-remove (observed live in the reference
- * deployment: 4 orphans across one E2E session); dev-agent.ts creates forks
+ * that `delete()` does NOT cascade-remove (one orphan accumulates per
+ * persistent fork); dev-agent.ts creates forks
  * with `persistent: false` so none is minted, and this sweep catches
  * anything that still appears. A failed start can leave the WHOLE fork
  * sandbox behind (`deleteSandbox`). This targets exactly one fork by its
@@ -317,9 +317,9 @@ export async function sweepSessionSnapshots(
 
 /**
  * Snapshots younger than this are never treated as orphans: a multi-GB fork
- * stop-snapshot takes 1-2 minutes to publish (observed live in the reference
- * deployment — `sweepSessionSnapshots` right after destroy() listed zero
- * snapshots, and the fork's snapshot appeared as `created` minutes later),
+ * stop-snapshot takes 1-2 minutes to publish (`sweepSessionSnapshots` right
+ * after destroy() can list zero snapshots, and the fork's snapshot appears as
+ * `created` minutes later),
  * so the just-finished run's own leftover is deliberately left for the NEXT
  * run's orphan sweep (or the 7d expiration backstop) rather than raced here.
  */

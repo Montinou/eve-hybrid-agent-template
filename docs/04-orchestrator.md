@@ -17,7 +17,7 @@ with `// CUSTOMIZE` markers. Every section below is load-bearing; keep all six w
 you rewrite it for your domain (the five below plus the short "Skills" section that
 routes to `agent/skills/` via `eve__skill` — detailed procedures live THERE, not in
 this prompt; one skill per workflow keeps the always-on prompt small and stable).
-The reference implementation's prompt (an unattended CI QA agent) follows exactly
+A prompt for an unattended agent (for example a CI QA agent) follows exactly
 this skeleton.
 
 ### 1. Identity
@@ -74,8 +74,8 @@ strands the run. Never ask for confirmation. When uncertain, apply the safe
 default defined above and deliver the final answer in the same turn.
 ```
 
-Define what the "safe default" is for *your* domain (the reference's is "when in
-doubt, include more test suites"). An unattended section without a safe default
+Define what the "safe default" is for *your* domain (for a CI QA agent it might be
+"when in doubt, include more test suites"). An unattended section without a safe default
 just moves the stall into the model's head.
 
 ### 5. Output contract
@@ -92,7 +92,7 @@ capable model; a long prompt costs per-turn money and dilutes the contract.
 
 ## Per-turn model routing
 
-One durable session can mix turn kinds: in the reference, PR events and follow-up
+One durable session can mix turn kinds: PR events and follow-up
 comment commands on the same PR share a continuation session. Different kinds
 deserve different price points, so the model is resolved **per turn** via
 `defineDynamic` in [`agent/agent.ts`](../agent/agent.ts):
@@ -118,7 +118,7 @@ Three facts to internalize:
   session would pin its model for every later turn, regardless of kind. Keyed on
   `ctx.turn?.id ?? null`, the resolver decides once per turn, and
   `ctx.session.auth.current` reflects the *current* turn's auth (a follow-up message
-  updates `auth.current`). This is gotcha #6 of the pattern; the reference hit it live.
+  updates `auth.current`). This is gotcha #6 of the pattern.
   (A session-keyed memo remains correct only for sessions whose model never changes —
   prompt caches are per-model, and a mid-session switch re-ingests at uncached prices.)
 - **The routing signal comes from the channel, not the model.** The dispatch

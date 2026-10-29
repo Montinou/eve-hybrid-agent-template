@@ -3,7 +3,7 @@
 // install its dependencies, and whether the dev-agent is allowed to run
 // against it.
 //
-// Design notes carried over from the proven reference implementation:
+// Design notes:
 //   - `repo` is the FULL GitHub name ("<owner>/<name>"), so a PR webhook's
 //     `repository.full_name` resolves directly via findEstateRepo().
 //   - `enabled` gates whether the dev-agent may run against a repo AND

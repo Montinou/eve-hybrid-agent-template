@@ -8,8 +8,8 @@
 # a template. Run `eve build` again and deploy its output"
 # (node_modules/eve/docs/sandbox/troubleshooting.mdx). When that snapshot
 # lapses, no new session can open a sandbox — while the health endpoint stays
-# green. An agent built on this pattern ran 12 days that way before anyone
-# noticed, because the only visible symptom was tool calls quietly degrading.
+# green. An agent can sit in that state for days before anyone notices,
+# because the only visible symptom is tool calls quietly degrading.
 #
 # So this asks the agent, from OUTSIDE, to run one command through its
 # built-in `bash` tool. That opens a sandbox for the probe's new session,

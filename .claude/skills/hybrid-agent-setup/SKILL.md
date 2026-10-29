@@ -379,9 +379,8 @@ git push                      # CI must go green: typecheck, vitest, build (no d
 
 Then manually dispatch the health-check workflow once, and finally open a
 **real probe PR** on an enabled estate repo that exercises every capability
-end-to-end. Expect the probe to find real bugs — the reference implementation's
-first E2E found three (runtime mismatch, shell quoting, URL derivation) on day
-one. Fix, redeploy, re-probe, then clean up the probe PR.
+end-to-end. Expect the probe to find real bugs — typically a sandbox runtime
+mismatch, shell quoting, or URL derivation. Fix, redeploy, re-probe, then clean up the probe PR.
 
 **Verification gate:** CI green, health-check dispatch succeeds, and the probe
 PR receives a complete comment with per-capability sections and honest
@@ -399,7 +398,8 @@ statuses. **The agent is not "done" until a full probe PR passed.**
    `auth: "direct"` on `createClaudeCode`. Left at its `"auto"` default, env
    gateway credentials (automatic OIDC on Vercel) outrank
    `ANTHROPIC_AUTH_TOKEN`, and the nested agent silently bills Opus through
-   the AI Gateway at API prices (real US$7.79/week leak, caught 2026-07-27).
+   the AI Gateway at API prices (a silent cost leak: check the auth path before
+   trusting a cost graph).
    The old nested object form (`{ anthropic: { authToken } }`) is rejected
    by 1.0.172, where an object `auth` must be a flat string record.
    Precedence re-verified at 1.0.42, 1.0.65, 1.0.88 and 1.0.172; keep

@@ -13,10 +13,10 @@ packages (`@ai-sdk/harness`, `@ai-sdk/harness-claude-code`,
 `@ai-sdk/sandbox-vercel`); it is not an eve feature, and eve itself documents no
 subscription-auth path for its loop model.
 
-The pattern is domain-agnostic. It has been proven in production as a code-review
-QA agent and a ticket-triage agent; this template ships the same plumbing with
-the domain stripped out, ready to become a docs agent, an ops agent, a test
-author, a migration bot — anything where a GitHub event should trigger a
+The pattern is domain-agnostic. It comes from running this shape in production
+(for example as a code-review QA agent or a ticket-triage agent); this template
+ships the plumbing with the domain stripped out, ready to become a docs agent,
+an ops agent, a test author, a migration bot — anything where a GitHub event should trigger a
 frontier-model coding agent against real repo checkouts.
 
 ## Architecture
