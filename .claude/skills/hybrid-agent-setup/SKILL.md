@@ -186,8 +186,8 @@ comment on the same PR creates NO session. **Do not proceed until both hold.**
 - `agent/lib/model.ts` — only if changing compiled fallbacks; prefer env
   overrides (rollback = unset the var).
 - `agent/agent.ts` — the `defineDynamic` per-turn routing usually needs no
-  edits; if you add turn kinds, route on **`turn.started`**, never
-  `session.started` (Hard constraint 6).
+  edits; if you add turn kinds, keep the model memo keyed on the **turn**
+  (`ctx.turn?.id ?? null`), never the session (Hard constraint 6).
 
 **Commands to run:**
 
@@ -395,9 +395,9 @@ statuses. **The agent is not "done" until a full probe PR passed.**
 5. **`keepLastSnapshots: { count: 2 }` — never 1.** The provider caches the
    template snapshotId in memory per function instance; count 1 deletes it out
    from under warm instances and poisons their forks.
-6. **Model routing keys on `turn.started`, not `session.started`** — durable
-   sessions mix turn kinds, and `session.started` pins whichever model came
-   first forever.
+6. **Model routing memoizes per turn (`ctx.turn?.id`), not per session** —
+   durable sessions mix turn kinds, and a session-keyed memo pins whichever
+   model came first forever.
 7. **Secrets travel only through `session.run`'s env map** — never in command
    strings, prompts, skill files, or logs; even key NAMES go via env (shell
    quoting eats `JSON.stringify` quotes). Redact secret-shaped text in every

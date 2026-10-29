@@ -154,7 +154,7 @@ gate, so declare it rather than inherit it.
 or review thread. So `"queue"` serializes turns *within one thread only*; other
 PRs keep running concurrently. Within one PR, comment turns and PR-event turns
 share the session, which is exactly why the model resolver in `agent/agent.ts`
-is keyed on `turn.started` rather than `session.started`.
+is memoized per turn (`ctx.turn?.id`) rather than per session.
 
 - [ ] Probe `@bot` comment: `eyes` reaction + bot reply comment.
 - [ ] Untagged comment: no reaction, no session.
