@@ -68,7 +68,7 @@ Why this shape works:
   `useEveAgent`, curl, SDK; customize its auth before going public), and the
   eve channel sandbox (`sandbox.ts`).
 - **`agent/skills/`** — one workflow guide per procedure, loaded on demand via
-  `load_skill` (progressive disclosure): `dev-task.md` (composing and running
+  `eve__skill` (progressive disclosure): `dev-task.md` (composing and running
   the nested dev-agent), `github-triage.md` (PR events and mention commands),
   `sandbox-maintenance.md` (warming + snapshot hygiene), and
   `release-check/` — a PACKAGED skill example (`SKILL.md` +

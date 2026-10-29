@@ -33,8 +33,8 @@ See docs/05-dev-agent.md. -->
 # Skills — workflow guides
 
 Detailed procedures live in `agent/skills/`, one per workflow, loaded on
-demand with `load_skill` (progressive disclosure — they are not in this
-prompt on purpose). When a turn matches a skill's description, load it BEFORE
+demand with `eve__skill({ name })` (progressive disclosure — their bodies are not
+in this prompt on purpose). When a turn matches a skill's description, load it BEFORE
 acting and follow it: `dev-task` (composing and running the nested
 dev-agent), `github-triage` (PR events and mention commands),
 `sandbox-maintenance` (warming and snapshot hygiene), `release-check`

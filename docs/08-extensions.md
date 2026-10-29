@@ -112,7 +112,7 @@ Two distinct uses, one provider:
   markdown) and `release-check/` (a PACKAGED skill: `SKILL.md` +
   `references/checklist.md`). Add one per workflow your agent owns (docs:
   `skills.mdx`); the description frontmatter is the routing hint the model uses
-  to decide when to `load_skill`. If skills feed the dev-agent prompt, snapshot
+  to decide when to load it with `eve__skill`. If skills feed the dev-agent prompt, snapshot
   them at build time and drift-gate the snapshot in CI like the instructions
   hash.
 - **Subagents and multi-step schedules:** `subagents.mdx` and `schedules.mdx` —

@@ -15,7 +15,7 @@ context into `auth.attributes` ([docs/03-github-channel.md](03-github-channel.md
 The template ships a generic prompt in [`agent/instructions.md`](../agent/instructions.md)
 with `// CUSTOMIZE` markers. Every section below is load-bearing; keep all six when
 you rewrite it for your domain (the five below plus the short "Skills" section that
-routes to `agent/skills/` via `load_skill` — detailed procedures live THERE, not in
+routes to `agent/skills/` via `eve__skill` — detailed procedures live THERE, not in
 this prompt; one skill per workflow keeps the always-on prompt small and stable).
 The reference implementation's prompt (an unattended CI QA agent) follows exactly
 this skeleton.
