@@ -1,7 +1,7 @@
 # 08 — Optional extensions
 
-Everything in docs 00–07 is the core pattern. This doc covers proven add-ons the
-reference implementation runs in production, kept generic. None of them are
+Everything in docs 00–07 is the core pattern. This doc covers add-ons that fit the
+pattern, written generically. None of them are
 required; add them when the need appears, not before. For every eve feature here,
 the authoritative API is the bundled docs —
 `node_modules/eve/docs/` — read the relevant page before writing code.
@@ -30,7 +30,7 @@ export default defineMcpClientConnection({
 });
 ```
 
-Design rules from the reference:
+Design rules:
 
 - **Allowlist read tools; keep writes deterministic.** Anything that mutates the
   external system should stay a typed host-side function called from your own tool
@@ -47,7 +47,7 @@ Design rules from the reference:
 
 eve has **no long-term memory subsystem by design** (`defineState` is
 session-scoped; see `node_modules/eve/docs/patterns/multi-tenant-memory.md` —
-"bring your own store + ordinary tools"). The reference's proven recipe is a
+"bring your own store + ordinary tools"). A workable recipe is a
 journal on **Vercel Blob** (private store), surfaced to the model as two tools,
 `recall` and `remember`:
 

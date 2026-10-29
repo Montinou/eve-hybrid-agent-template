@@ -247,9 +247,9 @@ export type EstateLookup = (
  * installed org-wide can deliver events from repos this agent was never meant
  * to serve.
  *
- * CUSTOMIZE: if automatic PR turns should serve only ONE repo (the reference
- * implementation fences its auto flow to a single primary repo while comment
- * commands work estate-wide), tighten the gate to
+ * CUSTOMIZE: if automatic PR turns should serve only ONE repo (a common
+ * setup fences the auto flow to a single primary repo while comment commands
+ * work estate-wide), tighten the gate to
  * `findRepo(ctx.repository.fullName)?.repo !== PRIMARY_REPO` — or return null
  * unconditionally to disable PR-event turns and keep mention commands only.
  */

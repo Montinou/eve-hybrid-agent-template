@@ -136,4 +136,29 @@ describe("removed eve APIs", () => {
     ).toBe(true);
     expect(offenders(files, retired)).toEqual([]);
   });
+
+  it("no doc or comment publishes a real deployment's operating history", () => {
+    // A public template must not publish another deployment's spend, usage or
+    // provenance: state the general lesson, not who observed it, when, or how
+    // much it cost.
+    const history = [
+      /reference (deployment|implementation)/i,
+      /\b(in|from|by) the reference\b/i,
+      /\bthe reference('s| hit| found)\b/i,
+      /US\$\s?\d/,
+      /\b(twelve|12) days\b/i,
+    ];
+    const files = filesUnder([
+      "agent",
+      "evals",
+      "scripts",
+      "docs",
+      ".claude",
+      ".github",
+      "README.md",
+      "AGENTS.md",
+    ]);
+    expect(files.length).toBeGreaterThan(0);
+    expect(offenders(files, history)).toEqual([]);
+  });
 });

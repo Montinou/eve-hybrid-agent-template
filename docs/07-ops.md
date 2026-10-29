@@ -158,10 +158,9 @@ step is inert. (Email alerts are optional — see
 `/eve/v1/health` returning 200 does not mean the agent can work. It proves the
 deployment boots and serves — nothing about whether it can open a sandbox. The
 two failure modes look identical from outside and are completely different
-inside, and the sandbox one is the quiet one: an agent built on this pattern
-ran **twelve days** unable to create a single sandbox while every health ping
-stayed green, because the tools needing a checkout degraded honestly instead of
-erroring.
+inside, and the sandbox one is the quiet one: an agent can go days unable to
+create a single sandbox while every health ping stays green, because the tools
+needing a checkout degrade honestly instead of erroring.
 
 [`.github/workflows/sandbox-health.yml`](../.github/workflows/sandbox-health.yml)
 closes that gap. Once a day it asks the agent to run `echo SANDBOX_OK` through
@@ -210,8 +209,8 @@ real PR on an enabled estate repo, post the mention command
 (`@{{BOT_NAME}} run`), and let every capability execute end-to-end through the
 real channel, real dispatch, real sandbox, real repos.
 
-Set expectations correctly: **the probe WILL find real bugs.** The reference
-implementation's first E2E probe found three on day one — a sandbox runtime
+Set expectations correctly: **the probe WILL find real bugs.** The first E2E
+probe typically surfaces a few — for example a sandbox runtime
 mismatch (template built for the wrong Node major), a shell-quoting bug in secret
 delivery (JSON keys losing their quotes inside a double-quoted string), and a wrong
 preview-URL derivation. None of these are catchable by unit tests or a health ping;

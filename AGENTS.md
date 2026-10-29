@@ -71,8 +71,8 @@ Never invent eve APIs. Every `defineAgent` / `defineTool` / `defineSandbox` /
 
 ## 5. Hard constraints
 
-There are 15 hard constraints (each one cost a real production debugging
-session in the reference implementation). The condensed list lives in
+There are 15 hard constraints (each one is a failure mode that shows up when
+running this pattern in production). The condensed list lives in
 `.claude/skills/hybrid-agent-setup/SKILL.md` under "Hard constraints"; the full
 rationale for each is spread across `docs/00-architecture.md` to
 `docs/07-ops.md`. Violating any of them

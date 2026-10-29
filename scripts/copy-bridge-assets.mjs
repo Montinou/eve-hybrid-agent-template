@@ -13,8 +13,7 @@
 //  - Vercel remote build:           .vercel/output/functions/<fn>.func/
 //    — the .func dir is what becomes /var/task at runtime. A fix that only
 //    targets .output/ passes its own check against the NON-deployed tree and
-//    still ships a broken bundle (found the hard way in the reference
-//    implementation).
+//    still ships a broken bundle.
 //
 // Local layout note: per eve's deployment guide, `eve build` only writes
 // `.vercel/output` when the `VERCEL` env var is set (every hosted Vercel

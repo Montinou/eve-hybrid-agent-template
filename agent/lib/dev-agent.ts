@@ -824,9 +824,8 @@ async function runOnce(params: {
     });
   } catch (error) {
     // A failed start can leave a half-created fork sandbox under this
-    // sessionId that nothing else will ever destroy — observed live in the
-    // reference deployment (a secrets-write failure left sandbox + multi-GB
-    // snapshot orphaned). Destroy what we hold, then sweep by name;
+    // sessionId that nothing else will ever destroy (e.g. a secrets-write
+    // failure leaves the sandbox + a multi-GB snapshot orphaned). Destroy what we hold, then sweep by name;
     // fail-soft by design.
     await Promise.resolve(sandboxSession?.destroy()).catch(() => {});
     await sweepSessionSnapshots(sessionId, { deleteSandbox: true }).catch(() => {});

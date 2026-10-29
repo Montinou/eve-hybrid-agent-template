@@ -1,7 +1,7 @@
 # 05 — The dev-agent: Claude Code nested inside a tool (phase 4)
 
-This is the heart of the pattern and the hard-won part of the reference
-implementation. [`agent/lib/dev-agent.ts`](../agent/lib/dev-agent.ts) runs a real
+This is the heart of the pattern and its hard-won part.
+[`agent/lib/dev-agent.ts`](../agent/lib/dev-agent.ts) runs a real
 Claude Code CLI — subscription auth via `ANTHROPIC_AUTH_TOKEN` — inside a Vercel
 Sandbox, against a pre-cloned checkout of your repo estate. Every capability tool
 (`agent/tools/run_dev_task.ts` and the ones you'll clone from it) is a thin wrapper
@@ -49,9 +49,10 @@ that costs money while every test stays green:
 | `"direct"` | takes the Anthropic branch before any Gateway lookup → reads `ANTHROPIC_AUTH_TOKEN` | the Claude subscription |
 | `"ai-gateway"` | Gateway only | Gateway |
 
-This exact leak burned **US$7.79 of Opus in one week** (2026-07-27) before it
-was caught. The nested agent runs perfectly either way: nothing errors, no test
-fails, and the only symptom is the invoice.
+This leak is silent: a misconfigured auth mode bills the AI Gateway at API
+prices, the nested agent runs perfectly either way, nothing errors, no test
+fails, and the only symptom is the invoice. Check the auth path before trusting
+a cost graph.
 
 **Detection signal:** `anthropic/claude-*` rows attributed to your project in
 the AI Gateway dashboard after a dev-agent run mean the leak is back —
@@ -132,7 +133,7 @@ Details and cost hygiene: [docs/06-sandbox-lifecycle.md](06-sandbox-lifecycle.md
 
 ## Secret delivery: env map → tmp file, never prompts
 
-Rules that survived a production incident and a security review in the reference:
+Rules that come from production incidents and security review:
 
 1. Secret **values** travel exclusively through `session.run`'s `env` map. Never in
    command text, never in the prompt, never in logs.

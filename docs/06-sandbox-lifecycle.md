@@ -90,12 +90,12 @@ what lets it lapse. If your agent can sit idle that long, raise
 and rely on [`.github/workflows/sandbox-health.yml`](../.github/workflows/sandbox-health.yml)
 ([docs/07-ops.md](07-ops.md)) to tell you when a redeploy is needed.
 
-Why this matters (observed live in the reference deployment): an agent's
-`SANDBOX_SNAPSHOT_EXPIRATION_MS` was 24 h, its last deploy was a Tuesday, and
-from Thursday onward **not one sandbox was created for twelve days**.
-`/eve/v1/health` answered 200 the entire time. Only the tools needing a
-checkout failed, and they degraded honestly instead of erroring — so nothing
-alerted, and the daily traffic looked normal.
+Why this matters: with a short `SANDBOX_SNAPSHOT_EXPIRATION_MS` and a quiet
+period after the last deploy, the template snapshot lapses and **no sandbox can
+be created until the next `pnpm build` deploy**, for as long as nobody notices.
+`/eve/v1/health` keeps answering 200 the entire time. Only the tools needing a
+checkout fail, and they degrade honestly instead of erroring — so nothing
+alerts, and the traffic looks normal.
 
 [ps]: https://vercel.com/docs/sandbox/concepts/persistent-sandboxes
 
@@ -135,8 +135,7 @@ The caller owns the fork: it passes it to `HarnessAgent.createSession({
 sandboxSession })` and destroys it itself (`destroy()` = stop + delete). Forks are
 created with `persistent: false` because `@vercel/sandbox` sandboxes are
 *"persistent by default: the filesystem is snapshotted when a sandbox stops"*;
-a persistent fork would leave a multi-GB snapshot behind on every run (observed
-live in the reference deployment: 4 orphans across one E2E session). A failed start
+a persistent fork would leave a multi-GB snapshot behind on every run. A failed start
 destroys what it holds, then sweeps the fork by name.
 
 There is no in-memory snapshot-id cache and no `keepLastSnapshots` setting to

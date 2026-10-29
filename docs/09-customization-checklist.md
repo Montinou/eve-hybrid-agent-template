@@ -167,7 +167,7 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
       configured (or consciously skipped)
 - [ ] `ANTHROPIC_AUTH_TOKEN` rotation date in a human calendar
 - [ ] **Gate:** the E2E probe PR — every capability exercised through the real
-      channel; expect to fix a few real bugs here (the reference found three)
+      channel; expect to fix a few real bugs here
 
 ## Optional — Extensions ([docs/08-extensions.md](08-extensions.md))
 
