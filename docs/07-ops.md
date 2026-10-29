@@ -50,8 +50,10 @@ After changing envs, **redeploy** — env changes don't apply to running deploym
    estate, sandbox-config guards, prompt builders, secret-command execution),
    including `agent/lib/removed-apis.test.ts`, which fails on any use of an API
    eve's pre-1.0 cleanup removed, and `agent/lib/docs-accuracy.test.ts`, which
-   fails when a doc names a script, path, version or environment variable that
-   does not exist.
+   fails when a doc names a script, path or version that does not match the
+   repo, or an environment variable (as an inline code span, a `NAME=`
+   assignment, `vercel env add`, `process.env`, `export` or a `$NAME`
+   reference) that is in neither `.env.example` nor the non-test code.
 3. `pnpm build` — must succeed **and print no deprecation notice**. The CI step
    captures the build output and fails when `grep -i deprecat` matches it.
 4. **Instructions-hash drift gate** — `node scripts/hash-instructions.mjs --check`
@@ -116,9 +118,11 @@ stops building. Four things keep it current:
 A doc or code comment that names a version is fixed in the same PR as the bump
 that makes it stale. `agent/lib/docs-accuracy.test.ts` (part of `pnpm test`, so
 part of CI) enforces this for the docs: it fails when a doc names a pnpm
-script, a repo path, an environment variable or an eve, `ai`, `@ai-sdk/*` or
-pnpm version that does not match the repo. It does not read code comments, so
-after a bump also `grep -rn` the old version under `agent/`, `evals/`,
+script, a repo path, an environment variable (in the forms listed in item 2
+above) or an eve, `ai`, `@ai-sdk/*` or pnpm version that does not match the
+repo; the `ai: ^x.y.z` form is compared with the `overrides` entry in
+`pnpm-workspace.yaml`, other ranges with `package.json`. It does not read
+code comments, so after a bump also `grep -rn` the old version under `agent/`, `evals/`,
 `scripts/` and `.github/`. After an eve or
 `@ai-sdk/harness-claude-code` bump also do the preview-deploy check in
 [Verification](#verification).

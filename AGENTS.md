@@ -38,8 +38,11 @@ Never invent eve APIs. Every `defineAgent` / `defineTool` / `defineSandbox` /
   it that way — it is what makes the agent testable without deploys.
 - Verify your work: `pnpm typecheck && pnpm test` after every change. The
   tests include `agent/lib/docs-accuracy.test.ts`, which fails when a doc names
-  a script, path, version or environment variable that does not exist: change
-  the doc in the same commit as the thing it describes.
+  a script, path or version that does not match the repo, or an environment
+  variable (as an inline code span, a `NAME=` assignment, `vercel env add`,
+  `process.env`, `export` or a `$NAME` reference) that is in neither
+  `.env.example` nor the non-test code: change the doc in the same commit as
+  the thing it describes.
 - Customization points in code are marked with `// CUSTOMIZE:` comments that
   point to the relevant `docs/NN-*.md` page. Edit at those markers; do not
   rewrite the load-bearing plumbing around them.

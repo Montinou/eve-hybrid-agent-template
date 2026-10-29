@@ -7,6 +7,15 @@ import { describe, expect, it } from "vitest";
 // version and environment variable the docs name must exist in the repo as
 // written. A doc that drifts (a renamed script, a deleted file, a bumped
 // dependency) fails here instead of misleading the next reader.
+//
+// Environment variables are recognized in a doc in these forms (names with at
+// least one underscore, so placeholders like NAME are ignored): a whole inline
+// code span (`NAME` or `NAME=value`), and inside code (fenced blocks and inline
+// spans) a `NAME=` assignment, `vercel env add|rm|update NAME`,
+// `process.env.NAME` / `process.env["NAME"]`, `export NAME=` and `$NAME` /
+// `${NAME}` references. Each must appear in .env.example, in non-test,
+// non-Markdown code under agent/, scripts/, .github/ or evals/, or in the
+// allow-list below.
 
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = resolve(dirname(SELF), "../..");
@@ -116,6 +125,15 @@ function installed(name: string): string {
   return declared(name).replace(/^[\^~]/, "");
 }
 
+// The `overrides` entry for a package in pnpm-workspace.yaml (docs write it as
+// `ai: ^7.0.157`, YAML syntax), or "" when there is none.
+function overridden(name: string): string {
+  const workspace = readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8");
+  const escaped = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const match = workspace.match(new RegExp(`^[ \\t]+["']?${escaped}["']?:[ \\t]*(\\S+)[ \\t]*$`, "m"));
+  return match ? match[1] : "";
+}
+
 function declared(name: string): string {
   const deps = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
     dependencies: Record<string, string>;
@@ -125,15 +143,18 @@ function declared(name: string): string {
 
 // Versions a doc names for eve, ai, @ai-sdk packages and pnpm that differ from
 // the repo. Accepts `name 1.2.3`, `name@1.2.3`, `name: ^1.2.3` and `name@~1.2.3`
-// (a range is compared with the range package.json declares, an exact version
-// with the installed one), and pnpm with a two-part version (`pnpm 12.17`).
+// (an exact version is compared with the installed one; a range with the range
+// package.json declares, except the YAML form `name: ^1.2.3`, which is the
+// pnpm-workspace.yaml override and is compared with that), and pnpm with a
+// two-part version (`pnpm 12.17`).
 function wrongVersions(source: string): string[] {
   const wrong: string[] = [];
   for (const match of source.matchAll(
-    /(?<![\w@/.-])(eve|ai|@ai-sdk\/[\w-]+)`?(?:@|:\s*| )([\^~]?)v?(\d+\.\d+\.\d+)(?![\w-]|\.\w)/g,
+    /(?<![\w@/.-])(eve|ai|@ai-sdk\/[\w-]+)`?(@|:\s*| )([\^~]?)v?(\d+\.\d+\.\d+)(?![\w-]|\.\w)/g,
   )) {
-    const [, name, range, version] = match;
-    const expected = range && declared(name) ? declared(name) : installed(name);
+    const [, name, separator, range, version] = match;
+    const rangeSource = separator.startsWith(":") ? overridden(name) || declared(name) : declared(name);
+    const expected = range && rangeSource ? rangeSource : installed(name);
     const named = `${range}${version}`;
     if (named !== expected && !(range === "" && version === installed(name))) {
       wrong.push(`${name} ${named} (expected ${expected})`);
@@ -161,19 +182,30 @@ const EXTERNAL_ENV_NAMES = new Map<string, string>([
 
 const ENV_NAME = "[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+";
 
-// Names a Markdown doc presents as an environment variable: a whole inline
-// code span (`NAME` or `NAME=value`) or a `NAME=value` line in a fenced block.
+// Names a Markdown doc presents as an environment variable (see the header
+// comment for the forms).
 function envNamesIn(source: string): string[] {
   const names: string[] = [];
+  const regions: string[] = [];
   const withoutFences = source.replace(/^[ \t]*```[^\n]*\n([\s\S]*?)^[ \t]*```/gm, (_m, body) => {
-    for (const line of (body as string).split("\n")) {
-      const found = line.match(new RegExp(`^\\s*(?:\\w+=\\S+\\s+)*(${ENV_NAME})=`));
-      if (found) names.push(found[1]);
-    }
+    regions.push(body as string);
     return "";
   });
-  for (const match of withoutFences.matchAll(new RegExp(`\`(${ENV_NAME})(?:=[^\`\\n]*)?\``, "g"))) {
-    names.push(match[1]);
+  for (const match of withoutFences.matchAll(/`([^`\n]+)`/g)) {
+    regions.push(match[1]);
+    const whole = match[1].match(new RegExp(`^(${ENV_NAME})(?:=.*)?$`));
+    if (whole) names.push(whole[1]);
+  }
+  const forms = [
+    new RegExp(`(?<![\\w$.])(${ENV_NAME})=`, "g"), // NAME=value, export NAME=value
+    new RegExp(`\\bvercel env (?:add|rm|update) (${ENV_NAME})\\b`, "g"),
+    new RegExp(`\\bprocess\\.env(?:\\.|\\[["'])(${ENV_NAME})\\b`, "g"),
+    new RegExp(`\\$\\{?(${ENV_NAME})\\b`, "g"), // $NAME, ${NAME}
+  ];
+  for (const region of regions) {
+    for (const form of forms) {
+      for (const match of region.matchAll(form)) names.push(match[1]);
+    }
   }
   return names;
 }
@@ -185,12 +217,14 @@ function unknownEnvNames(source: string, known: ReadonlySet<string>): string[] {
 }
 
 // Every env-like name that appears in .env.example or in the code and CI
-// configuration (this test file is excluded: it holds the allow-list).
+// configuration. Tests and Markdown are excluded, so a fixture or a skill file
+// cannot vouch for a variable no code reads (this test file is a test, so it
+// is excluded too: it holds the allow-list).
 function knownEnvNames(): Set<string> {
   const sources = [
     join(ROOT, ".env.example"),
     ...["agent", "scripts", ".github", "evals"].flatMap((dir) => listFiles(join(ROOT, dir))),
-  ].filter((file) => file !== SELF);
+  ].filter((file) => file === join(ROOT, ".env.example") || !/\.test\.[cm]?[jt]s$|\.md$/.test(file));
   const names = new Set<string>();
   for (const file of sources) {
     for (const match of readFileSync(file, "utf8").matchAll(new RegExp(`\\b${ENV_NAME}\\b`, "g"))) {
@@ -207,8 +241,26 @@ describe("docs accuracy helpers", () => {
     expect(wrongVersions("(`ai: ^7.0.157`)")).toEqual([]);
     expect(wrongVersions(`eve ${installed("eve")} and \`ai@${installed("ai")}\``)).toEqual([]);
     expect(wrongVersions("(`ai: ^7.0.1`)")).toHaveLength(1);
+    expect(overridden("ai")).toBe("^7.0.157"); // the pnpm-workspace.yaml entry the `ai:` form describes
     expect(wrongVersions("`eve@^0.1.0`")).toHaveLength(1);
     expect(wrongVersions("run pnpm 12.17 here")).toHaveLength(1);
+  });
+
+  it("env-var check sees every supported form", () => {
+    const known = new Set(["GITHUB_APP_ID"]);
+    const flagged = (source: string) => unknownEnvNames(source, known);
+    expect(flagged("```sh\nvercel env add GITHUB_APP_IDD production\n```")).toEqual(["GITHUB_APP_IDD"]);
+    expect(flagged("run `vercel env add GITHUB_APP_IDD production < key.pem`")).toEqual(["GITHUB_APP_IDD"]);
+    expect(flagged("```ts\nconst a = process.env.FOO_BAR_BAZ;\n```")).toEqual(["FOO_BAR_BAZ"]);
+    expect(flagged("```ts\nconst a = process.env[\"FOO_BAR_BAZ\"];\n```")).toEqual(["FOO_BAR_BAZ"]);
+    expect(flagged("```sh\nexport FOO_BAR_BAZ=1\n```")).toEqual(["FOO_BAR_BAZ"]);
+    expect(flagged("```sh\nGITHUB_APP_ID=1 FOO_BAR_BAZ=$GITHUB_APP_ID pnpm x\n```")).toEqual(["FOO_BAR_BAZ"]);
+    expect(flagged("```sh\necho $FOO_BAR_BAZ\n```")).toEqual(["FOO_BAR_BAZ"]);
+    expect(flagged("```sh\necho ${FOO_BAR_BAZ}\n```")).toEqual(["FOO_BAR_BAZ"]);
+    expect(flagged("use `X=$FOO_BAR_BAZ` here")).toEqual(["FOO_BAR_BAZ"]);
+    // known names, placeholders and prose are not flagged
+    expect(flagged("```sh\nvercel env add GITHUB_APP_ID production\nexport GITHUB_APP_ID=1\n```")).toEqual([]);
+    expect(flagged("`vercel env add NAME production` and prose FOO_BAR_BAZ")).toEqual([]);
   });
 
   it("env-var check flags an unknown name and accepts a known one", () => {
@@ -274,11 +326,17 @@ describe("docs accuracy", () => {
     expect(known.has("EVE_BYPASS_TOKEN")).toBe(true); // the check sees scripts/
     expect(known.has("GITHUB_APP_ID")).toBe(true); // and .env.example
     const unknown: string[] = [];
+    let total = 0;
     for (const file of DOC_FILES.filter((f) => f.endsWith(".md"))) {
-      for (const name of unknownEnvNames(text.get(file) ?? "", known)) {
-        unknown.push(`${rel(file)}: ${name}`);
-      }
+      const source = text.get(file) ?? "";
+      total += envNamesIn(source).length;
+      for (const name of unknownEnvNames(source, known)) unknown.push(`${rel(file)}: ${name}`);
     }
+    expect(total).toBeGreaterThan(0); // an extractor that finds nothing must not pass
+    const form = (file: string) => envNamesIn(text.get(join(ROOT, file)) ?? "");
+    expect(form("docs/03-github-channel.md")).toContain("GITHUB_APP_ID"); // vercel env add
+    expect(form("docs/05-dev-agent.md")).toContain("AGENT_WRITE_REPOS"); // process.env
+    expect(form("docs/07-ops.md")).toContain("EVE_TOKEN"); // a later NAME= assignment
     expect(unknown).toEqual([]);
   });
 
