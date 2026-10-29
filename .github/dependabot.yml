@@ -1,0 +1,26 @@
+# Keeps the template from going stale (docs/07-ops.md, "Staying current").
+# One weekly PR per ecosystem; run `pnpm typecheck && pnpm test && pnpm build`
+# on it (README.md, "Upgrading eve") before merging.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # eve, the AI SDK and the Vercel packages move together: a bump of one
+      # usually needs the matching bump of the others.
+      eve-stack:
+        patterns:
+          - eve
+          - ai
+          - "@ai-sdk/*"
+          - "@vercel/*"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"

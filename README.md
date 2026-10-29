@@ -120,6 +120,23 @@ pointing at the relevant doc.
    `pnpm build` + `vercel deploy --prod`, and confirm
    `GET https://<deployment>/eve/v1/health` returns 200.
 
+## Upgrading eve
+
+eve is pre-1.0 and removes deprecated APIs between releases, so a bump can
+break the build. After bumping `eve` (or `ai`, `@ai-sdk/*`, `@vercel/*`),
+read the migration notes that ship with the installed version, starting at
+`node_modules/eve/docs/guides/prepare-for-1-0.md`, then apply one rule:
+
+```bash
+pnpm typecheck && pnpm test && pnpm build
+```
+
+All three must pass, and `pnpm build 2>&1 | grep -i deprecat` must print
+nothing: CI fails on any deprecation notice in the build output, so a
+deprecated API is fixed in the bump that introduces the warning. A weekly
+Dependabot PR proposes these bumps (see [`docs/07-ops.md`](docs/07-ops.md),
+"Staying current").
+
 ## Docs index
 
 | Doc | What it covers |

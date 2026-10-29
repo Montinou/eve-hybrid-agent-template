@@ -47,8 +47,12 @@ After changing envs, **redeploy** — env changes don't apply to running deploym
 1. `pnpm typecheck` — `lib/` is pure TypeScript, so most of the system is
    verifiable without a deploy.
 2. `pnpm test` — the vitest suite (dispatch, model resolution, budget clamp,
-   estate, sandbox-config guards, prompt builders, secret-command execution).
-3. **Instructions-hash drift gate** — `node scripts/hash-instructions.mjs --check`
+   estate, sandbox-config guards, prompt builders, secret-command execution),
+   including `agent/lib/removed-apis.test.ts`, which fails on any use of an API
+   eve's pre-1.0 cleanup removed.
+3. `pnpm build` — must succeed **and print no deprecation notice**. The CI step
+   captures the build output and fails when `grep -i deprecat` matches it.
+4. **Instructions-hash drift gate** — `node scripts/hash-instructions.mjs --check`
    fails when [`agent/instructions.md`](../agent/instructions.md) and its committed
    hash ([`agent/lib/instructions-hash.ts`](../agent/lib/instructions-hash.ts)) are
    out of sync. This catches the classic failure of editing the prompt (or its
@@ -62,6 +66,25 @@ files, so an unpatched bundle fails every dev-agent call with ENOENT at runtime
 trees and patches the server function's `maxDuration` to 800 in the same pass. The
 `build` script in `package.json` already chains it; CI and any deploy pipeline must
 go through that script.
+
+## Staying current
+
+eve is pre-1.0 and ships breaking changes, so a template that is not updated
+stops building. Two things keep it current:
+
+- **A weekly update PR.** [.github/dependabot.yml](../.github/dependabot.yml)
+  opens one grouped PR per week for npm (eve, `ai`, `@ai-sdk/*` and
+  `@vercel/*` move together) and one for GitHub Actions.
+- **One rule on that PR:** run `pnpm typecheck`, `pnpm test` and `pnpm build`,
+  and merge only when all three pass with no deprecation output (CI enforces
+  the same). When the PR bumps eve, read the migration notes in
+  `node_modules/eve/docs/guides/` for the new version before fixing failures.
+
+A doc or code comment that names a version is fixed in the same PR as the bump
+that makes it stale. A docs-accuracy test is meant to enforce this; until it
+exists in the repo, check by hand (`grep -rn` the old version). After an eve or
+`@ai-sdk/harness-claude-code` bump also do the preview-deploy check in
+[Verification](#verification).
 
 ## External health check
 
@@ -169,7 +192,7 @@ cheap, unambiguous, and worth doing after every dependency bump of
 
 ## Verification
 
-- CI green on a trivial PR to the agent repo (all three gates).
+- CI green on a trivial PR to the agent repo (every gate above).
 - `curl -s -o /dev/null -w "%{http_code}" https://<domain>/eve/v1/health` → `200`.
 - Manually dispatch the health-check workflow (`workflow_dispatch`) and confirm the
   ping step passes; if Resend is configured, temporarily point `EVE_HEALTH_URL` at

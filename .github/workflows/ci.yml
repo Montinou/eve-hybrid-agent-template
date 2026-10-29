@@ -1,4 +1,5 @@
-# CI gate: typecheck + unit tests + generated-artifact drift (docs/07-ops.md).
+# CI gate: typecheck + unit tests + build (no deprecation output) +
+# generated-artifact drift (docs/07-ops.md).
 #
 # Deliberately NO deploy and NO `eve eval` here: deploys are Vercel's job
 # (push-to-deploy on the linked project), and evals run against a live model —
@@ -14,10 +15,10 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Reads the pinned pnpm version from package.json's "packageManager".
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -26,6 +27,20 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      # Build gate: the build must succeed AND print no deprecation notice, so
+      # an eve or dependency bump that starts deprecating an API fails here
+      # instead of surviving until the API is removed. This is the "Upgrading
+      # eve" rule in README.md. The output goes to a file under RUNNER_TEMP
+      # (outside the checkout); `shell: bash` runs with pipefail, so a failed
+      # build fails the step before the grep runs.
+      - name: Build (fails on any deprecation notice)
+        shell: bash
+        run: |
+          pnpm build 2>&1 | tee "$RUNNER_TEMP/build.log"
+          if grep -i deprecat "$RUNNER_TEMP/build.log"; then
+            echo "::error::pnpm build printed a deprecation notice (lines above). Migrate off the deprecated API; see node_modules/eve/docs/guides/prepare-for-1-0.md."
+            exit 1
+          fi
       # Drift gate: agent/lib/instructions-hash.ts is generated from
       # agent/instructions.md (the deployed runtime has no repo filesystem, so
       # the hash ships precomputed in the bundle). Editing the prompt without

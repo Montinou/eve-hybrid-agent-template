@@ -139,8 +139,8 @@ a persistent fork would leave a multi-GB snapshot behind on every run (observed
 live under the old provider: 4 orphans across one E2E session). A failed start
 destroys what it holds, then sweeps the fork by name.
 
-The deprecated `createVercelSandbox` provider and `prepareHarnessSandboxTemplate`
-are no longer used, and with them went the in-memory snapshot-id cache that made
+The old provider and `prepareHarnessSandboxTemplate` are no longer used, and
+with them went the in-memory snapshot-id cache that made
 `keepLastSnapshots: { count: 2 }` necessary: each template now holds exactly one
 snapshot.
 

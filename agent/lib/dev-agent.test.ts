@@ -290,9 +290,8 @@ describe("buildSessionSecretsCommand", () => {
 });
 
 describe("buildDevSandboxCreateOptions", () => {
-  // Options for createVercelNetworkSandboxSession (the replacement for the
-  // deprecated createVercelSandbox provider). The template and every fork
-  // are created from them.
+  // Options for createVercelNetworkSandboxSession (@ai-sdk/sandbox-vercel).
+  // The template and every fork are created from them.
   it("creates NON-persistent sandboxes so a fork's stop()/destroy() mints no snapshot", () => {
     // @vercel/sandbox README: "Sandboxes are persistent by default: the
     // filesystem is snapshotted when a sandbox stops". A throwaway fork must

@@ -23,7 +23,10 @@
 #   vars.ALERT_EMAIL_FROM   verified Resend sender
 #   vars.ALERT_EMAIL_TO     recipient(s), comma-separated
 #   secrets.RESEND_API_KEY  Resend API key
-#   secrets.AGENT_API_KEY   the eve channel's API key (see agent/channels/eve.ts)
+#   secrets.AGENT_API_KEY   an API key your eve channel accepts as a bearer token.
+#                           The template's agent/channels/eve.ts admits only
+#                           Vercel OIDC and local dev until you add an API-key
+#                           verifier there; see scripts/orchestrate.mjs (EVE_TOKEN).
 name: Sandbox health
 on:
   schedule:
@@ -35,8 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
 

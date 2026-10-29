@@ -48,9 +48,8 @@ import {
 // checkout + incremental install + probes. No credentials ever persist in
 // the template snapshot.
 //
-// SANDBOX WIRING (@ai-sdk/sandbox-vercel's createVercelNetworkSandboxSession,
-// the replacement for the deprecated createVercelSandbox provider): the
-// harness template (createHarnessSandboxTemplate: the Claude Code bridge
+// SANDBOX WIRING (@ai-sdk/sandbox-vercel's createVercelNetworkSandboxSession):
+// the harness template (createHarnessSandboxTemplate: the Claude Code bridge
 // recipe + onBootstrap) is built once per identity into a snapshot of a
 // non-persistent template sandbox, and each run forks a NON-persistent live
 // sandbox from it, which this module owns and destroys. Stale prior-identity
