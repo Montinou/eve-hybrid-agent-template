@@ -7,7 +7,7 @@ Everything you collect here lands in an env var from the canon in [`.env.example
 ## 1. Local toolchain
 
 - **Node 24.x** — the agent host runtime (`engines` in [`package.json`](../package.json)). Note: this is the *host* runtime; the sandbox where the dev-agent runs has its own, separate runtime pin matched to your target repos (see [docs/05-dev-agent.md](05-dev-agent.md)).
-- **pnpm** — this template's package manager. `corepack enable` or `npm i -g pnpm`.
+- **pnpm** — this template's package manager, pinned in the `packageManager` field of [`package.json`](../package.json) (`corepack enable` installs that exact version, or `npm i -g pnpm`). pnpm 12 will not install a release younger than 24 hours ([docs/07-ops.md](07-ops.md), "Staying current").
 - **Vercel CLI** — `npm i -g vercel`.
 - **Claude Code CLI** — needed once, on your machine, to mint the subscription token (below). The deployed agent installs its own copy inside the sandbox.
 

@@ -32,12 +32,13 @@ import { BOT_NAME } from "#lib/dispatch.ts";
 // are for what only the live loop can prove.
 //
 // Cost note: the command case STUBS run_dev_task (eve tool stubs,
-// node_modules/eve/docs/evals/tool-stubs.mdx), so it no longer boots a
-// sandboxed dev-agent: the stub removes that cost and each case costs one
-// orchestrator turn. Tool replacement is denied by default — the target's eve
-// channel must permit it for the eval runner (allowToolStubs). Both cases are
-// tagged `fast`; `live` is reserved for evals that exercise the real tool, and
-// `pnpm eval` excludes it.
+// node_modules/eve/docs/evals/tool-stubs.mdx), so it boots no sandboxed
+// dev-agent: the stub removes that cost and each case costs one orchestrator
+// turn (the greeting case expects no tool call at all). Tool replacement is
+// denied by default: the target's eve channel must permit it for the eval
+// runner (allowToolStubs; docs/10-evals.md), and agent/channels/eve.ts does
+// not. Both cases are tagged `fast`; `live` is reserved for evals that
+// exercise the real tool, and `pnpm eval` excludes it.
 // ---------------------------------------------------------------------------
 
 export default [
@@ -64,7 +65,8 @@ export default [
       // CUSTOMIZE: keep this message in sync with your command grammar
       // (agent/lib/dispatch.ts) and command→tool table (agent/instructions.md).
       const turn = await session.send(`@${BOT_NAME} run`);
-      // Run-level assertions gate by default; .gate() makes it explicit.
+      // Scoped (turn, session and run) assertions gate by default; .gate()
+      // makes it explicit.
       turn.succeeded().gate();
       turn.calledTool("run_dev_task").gate();
     },

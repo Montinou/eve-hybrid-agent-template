@@ -136,13 +136,13 @@ sandboxSession })` and destroys it itself (`destroy()` = stop + delete). Forks a
 created with `persistent: false` because `@vercel/sandbox` sandboxes are
 *"persistent by default: the filesystem is snapshotted when a sandbox stops"*;
 a persistent fork would leave a multi-GB snapshot behind on every run (observed
-live under the old provider: 4 orphans across one E2E session). A failed start
+live in the reference deployment: 4 orphans across one E2E session). A failed start
 destroys what it holds, then sweeps the fork by name.
 
-The old provider and `prepareHarnessSandboxTemplate` are no longer used, and
-with them went the in-memory snapshot-id cache that made
-`keepLastSnapshots: { count: 2 }` necessary: each template now holds exactly one
-snapshot.
+There is no in-memory snapshot-id cache and no `keepLastSnapshots` setting to
+tune: each template holds exactly one snapshot, so a recipe change is cleaned up
+by `sweepStaleTemplates()` below rather than by pruning snapshots within a
+lineage.
 
 ## The three sweeps (backstops, all fail-soft)
 

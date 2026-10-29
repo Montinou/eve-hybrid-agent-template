@@ -24,11 +24,15 @@ coding agent (Claude Code, Codex, Cursor) or human can follow it top to bottom.
 - Before writing any eve code in any phase, read
   `node_modules/eve/docs/README.md` first, then the specific reference page for
   the API you are touching (`reference/`, `channels/`, `tools/`,
-  `schedules.mdx`, `sandbox.mdx`). Never invent eve APIs from memory.
+  `schedules.mdx`, `sandbox/`, `evals/`). Never invent eve APIs from memory.
 - Before each phase, read the doc listed for it (`docs/NN-*.md`). The docs
   carry the rationale; this skill carries the order and the gates.
 - Package manager is **pnpm**. Build is always `pnpm build` — **never bare
   `eve build`** (see Hard constraint 2).
+- The hybrid shape (AI Gateway orchestrator, subscription-authenticated Claude
+  Code in a Vercel Sandbox) is this template's own convention, built on eve and
+  the AI SDK harness packages; it is not an eve feature. eve's bundled docs
+  describe eve, not this pattern.
 - Ask the human the listed questions at the start of each phase; do not guess
   answers to any of them. Where the template already has a sane default
   (models, timeouts, cron), defaults are fine unless the human objects.
@@ -87,9 +91,9 @@ curl -sf https://{{VERCEL_PROJECT}}.vercel.app/eve/v1/health
 If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, the
 lockfile holds a release published under 24 h ago and pnpm 12's
 `minimumReleaseAge` (built-in default 1440 minutes) blocks it. It is a
-supply-chain control: wait until the release is a day old and re-run. Never
-add a `minimumReleaseAgeExclude` list or lower the setting (docs/07-ops.md,
-"Staying current").
+supply-chain control: never bypass the hold and never commit an exclude list
+or a lowered setting. Wait until the release is 24 h old, then re-run CI
+(docs/07-ops.md, "Staying current").
 
 **Verification gate:** `GET /eve/v1/health` on the deployed URL returns 200
 (this route is always public — it skips route auth), and
@@ -162,7 +166,8 @@ comment on the same PR creates NO session. **Do not proceed until both hold.**
 
 ## Phase 3 — Orchestrator brain
 
-**Doc to read first:** `docs/04-orchestrator.md`.
+**Doc to read first:** `docs/04-orchestrator.md`; then `docs/10-evals.md`
+before touching `evals/`.
 
 **Questions for the human:**
 
@@ -190,6 +195,12 @@ comment on the same PR creates NO session. **Do not proceed until both hold.**
   the shipped `[vercelOidc(), localDev()]` is fine for dev and internal
   callers but never admits external clients — wire real auth before making
   the HTTP surface public.
+- `evals/delegation.eval.ts`, `evals/routing.eval.ts` — keep the mention
+  command in sync with your grammar. `pnpm eval` runs them against a live
+  model, and the stubbed cases need the `allowToolStubs` grant on the target's
+  eve channel, which the shipped `agent/channels/eve.ts` does not give. Granting
+  it changes the channel's auth, so it is the owner's decision (docs/10-evals.md);
+  do not add it yourself to make the evals pass.
 - `agent/lib/model.ts` — only if changing compiled fallbacks; prefer env
   overrides (rollback = unset the var).
 - `agent/agent.ts` — the `defineDynamic` per-turn routing usually needs no
@@ -201,7 +212,7 @@ comment on the same PR creates NO session. **Do not proceed until both hold.**
 ```bash
 pnpm typecheck && pnpm test
 node scripts/hash-instructions.mjs   # refresh the hash — CI gates instructions drift
-pnpm exec eve eval                   # optional: run evals/routing.eval.ts
+pnpm eval --list                    # optional: list the evals (docs/10-evals.md)
 pnpm build && vercel deploy --prod
 ```
 
@@ -332,7 +343,10 @@ destroy, sweeps) missed it.
 
 Confirm the maintenance run reported `warmed: true`, not just that it
 finished, and dispatch `sandbox-health.yml` once by hand: it must report
-`EVE_SANDBOX_STATUS=healthy`.
+`EVE_SANDBOX_STATUS=healthy`. It needs `secrets.AGENT_API_KEY`, a bearer token
+the eve channel accepts; the shipped `agent/channels/eve.ts` accepts none until
+an API-key verifier is added, which changes the channel's auth and so is the
+owner's decision (docs/07-ops.md).
 
 ---
 
@@ -351,15 +365,16 @@ optional extras and `docs/09-customization-checklist.md` to close out).
 
 **Files to edit:**
 
-- `.github/workflows/ci.yml` and `.github/workflows/health-check.yml` — set
-  the deployment URL and confirm secret names; the workflows themselves ship
-  ready.
+- `.github/workflows/health-check.yml` and `.github/workflows/sandbox-health.yml`
+  — no edits; set their repository variables and secrets (the deployment URL is
+  `vars.EVE_HEALTH_URL`). `.github/workflows/ci.yml` ships ready and needs no
+  configuration.
 
 **Commands to run:**
 
 ```bash
 pnpm typecheck && pnpm test
-git push                      # CI must go green: typecheck + vitest + instructions-hash gate
+git push                      # CI must go green: typecheck, vitest, build (no deprecation notice), instructions-hash gate
 ```
 
 Then manually dispatch the health-check workflow once, and finally open a

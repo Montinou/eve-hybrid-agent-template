@@ -6,6 +6,8 @@ Read this first. Every later doc assumes you understand the split described here
 
 One durable [eve](https://eve.dev) agent deployed on Vercel splits every request into a **cheap orchestration layer** and an **expensive execution layer**, with different auth and different billing for each. A small AI-Gateway model runs the loop (routing turns, calling tools, formatting results); the heavy work runs as **real Claude Code** — subscription auth, full CLI — inside a Vercel Sandbox, launched from a tool via `@ai-sdk/harness`.
 
+The hybrid split is this template's own convention, built on eve and the AI SDK harness packages (`@ai-sdk/harness`, `@ai-sdk/harness-claude-code`, `@ai-sdk/sandbox-vercel`). It is not an eve feature: eve supplies the durable loop, channels, tools and sandboxes, and the template composes them with the harness packages so the expensive layer can bill to a subscription.
+
 ## The diagram
 
 ```
@@ -42,7 +44,7 @@ The loop generates many small turns; the dev-agent generates a few big runs. The
 | Layer | Runs where | Model config | Auth | Bills to |
 |---|---|---|---|---|
 | eve loop turns (routing, orchestration, comment posting) | Vercel function (host) | AI Gateway string (e.g. `anthropic/claude-sonnet-4.5`) or an AI SDK `LanguageModel` | Vercel OIDC (automatic on Vercel) or `AI_GATEWAY_API_KEY` | Vercel AI Gateway (or the provider console, for a provider `LanguageModel`) |
-| Nested dev-agent (Claude Code CLI) | INSIDE the Vercel Sandbox | `createClaudeCode({ auth: { anthropic: { authToken } }, model? })` — the explicit auth block is REQUIRED (see below) | `ANTHROPIC_AUTH_TOKEN` (subscription OAuth from `claude setup-token`) | Claude subscription + its extra-usage credits |
+| Nested dev-agent (Claude Code CLI) | INSIDE the Vercel Sandbox | `createClaudeCode({ auth: "direct", model? })` — pinning the auth mode is REQUIRED (see below) | `ANTHROPIC_AUTH_TOKEN` (subscription OAuth from `claude setup-token`) | Claude subscription + its extra-usage credits |
 | Sandbox compute | Vercel | — | — | Vercel (vCPU-minutes + snapshot storage); unavoidable |
 
 ## The latency/cost split
@@ -110,7 +112,8 @@ This template is the domain-stripped scaffold of a production QA agent: a GitHub
 | eve channel sandbox | `agent/sandbox.ts`, `agent/lib/sandbox-config.ts` |
 | Template warming + sweeps | `agent/tools/warm_sandbox.ts`, `agent/lib/template-sweep.ts`, `agent/schedules/template-maintenance.md` |
 | Build post-processing | `scripts/copy-bridge-assets.mjs` |
-| External health monitoring | `.github/workflows/health-check.yml` |
+| External health monitoring | `.github/workflows/health-check.yml`, `.github/workflows/sandbox-health.yml` |
+| Evals (live-loop behavior unit tests cannot reach) | `evals/`, [docs/10-evals.md](10-evals.md) |
 
 ## Verification
 

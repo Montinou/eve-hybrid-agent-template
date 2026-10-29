@@ -10,7 +10,7 @@ import { BOT_NAME } from "#lib/dispatch.ts";
 //
 // Tool replacement is denied by default: the target's eve channel must permit
 // it for the eval runner (allowToolStubs; see the tool-stubs doc and
-// docs/08-extensions.md). Keep the stub shape in sync with run_dev_task.
+// docs/10-evals.md). Keep the stub shape in sync with run_dev_task.
 export default defineEval({
   description:
     "GATE: a heavy task is delegated to run_dev_task once and its result is relayed",

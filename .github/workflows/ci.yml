@@ -1,9 +1,9 @@
 # CI gate: typecheck + unit tests + build (no deprecation output) +
 # generated-artifact drift (docs/07-ops.md).
 #
-# Deliberately NO deploy and NO `eve eval` here: deploys are Vercel's job
+# Deliberately NO deploy and NO eval run here: deploys are Vercel's job
 # (push-to-deploy on the linked project), and evals run against a live model —
-# run them on demand (`pnpm exec eve eval`), not on every push.
+# run them on demand (`pnpm eval`, docs/10-evals.md), not on every push.
 name: CI
 
 on:

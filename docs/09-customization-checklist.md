@@ -92,6 +92,12 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
       routing hints; the prompt's Skills section lists exactly these
 - [ ] Command→tool mapping in the prompt matches `dispatch.ts` attributes
 - [ ] Loop models chosen (`ORCHESTRATOR_MODEL` / `COMMAND_MODEL`) or defaults kept
+- [ ] Evals reviewed ([docs/10-evals.md](10-evals.md)): the mention
+      command in `evals/routing.eval.ts` and `evals/delegation.eval.ts` matches
+      your command grammar; `pnpm eval --list` shows the suite. Running the stubbed evals
+      needs the `allowToolStubs` grant, which the shipped
+      `agent/channels/eve.ts` does not give: decide, with your owner, whether and
+      where to grant it before you rely on them
 - [ ] `pnpm hash-instructions` re-run and hash committed
 - [ ] **Gate:** probe comment gets a reply following the output contract; command
       turns run on the command model (check the Gateway dashboard)
@@ -145,7 +151,8 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 ## Phase 6 — Ops ([docs/07-ops.md](07-ops.md))
 
 - [ ] All env vars from the table above set in Vercel; secrets Sensitive
-- [ ] CI green (typecheck + vitest + instructions-hash gate)
+- [ ] CI green (typecheck + vitest + a build with no deprecation notice +
+      instructions-hash gate)
 - [ ] `EVE_HEALTH_URL` repo variable set; health-check workflow dispatched
 - [ ] `sandbox-health.yml` enabled with `secrets.AGENT_API_KEY` (a bearer
       token your eve channel accepts: add an API-key verifier to
@@ -156,7 +163,8 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
       billing from your subscription to the AI Gateway
 - [ ] Branch validated against its protected preview with
       `EVE_BYPASS_TOKEN` before merging any dependency bump
-      manually once and green; Resend alert configured (or consciously skipped)
+- [ ] Health-check workflow dispatched manually once and green; Resend alert
+      configured (or consciously skipped)
 - [ ] `ANTHROPIC_AUTH_TOKEN` rotation date in a human calendar
 - [ ] **Gate:** the E2E probe PR — every capability exercised through the real
       channel; expect to fix a few real bugs here (the reference found three)
@@ -165,7 +173,8 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 
 - [ ] MCP connection(s) for external data
 - [ ] Blob journal (`recall`/`remember`) + weekly digest schedule
-- [ ] Evals grown from incidents
+- [ ] Evals grown from incidents, `live` evals added only where stubs cannot
+      prove the behavior ([docs/10-evals.md](10-evals.md))
 - [ ] Agent-sent email reports
 
 ## Definition of done
@@ -183,8 +192,10 @@ The agent is DONE when all of the following hold simultaneously:
 4. **Injection proof:** a PR embedding hostile instructions was ignored and the
    normal task ran.
 5. **Cost steady state:** 24 h after the probe, the sandbox inventory is exactly
-   1 harness template sandbox + 1 template snapshot + eve-managed channel
-   snapshots, nothing else; the daily maintenance schedule has run at least once.
+   1 harness template sandbox + 1 template snapshot + zero fork snapshots, plus
+   eve's own build-time template snapshot and its per-session sandboxes and
+   snapshots (eve-managed and healthy, `docs/06-sandbox-lifecycle.md`), nothing
+   else; the daily maintenance schedule has run at least once.
 6. **No placeholders left:** `git grep -n '{{'` over docs you customized returns
    only intentional examples; `git grep -n 'CUSTOMIZE:'` returns only markers you
    consciously decided to keep as-is.

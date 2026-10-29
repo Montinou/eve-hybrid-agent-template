@@ -16,7 +16,7 @@ pnpm install
 
 pnpm is not optional here: [`pnpm-workspace.yaml`](../pnpm-workspace.yaml) pins `overrides` for the `ai` package that the harness stack depends on (pnpm 12 ignores `resolutions` in `package.json`), and the lockfile encodes a version set (`eve` + `ai` + `@ai-sdk/harness*` + `@vercel/sandbox`) that is known to work together. Don't regenerate it with another package manager.
 
-pnpm 12 also refuses to install any version published less than 24 hours ago (`minimumReleaseAge`, built-in default 1440 minutes), even from the lockfile. If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, wait until that release is a day old and re-run; do not add a `minimumReleaseAgeExclude` list ([docs/07-ops.md](07-ops.md), "Staying current").
+pnpm 12 also refuses to install any version published less than 24 hours ago (`minimumReleaseAge`, built-in default 1440 minutes), even from the lockfile. If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, never bypass the hold (no `minimumReleaseAgeExclude` list, no lowered `minimumReleaseAge`, nothing committed to get around it), wait until that release is 24 hours old and re-run ([docs/07-ops.md](07-ops.md), "Staying current").
 
 `pnpm-workspace.yaml` holds the pnpm settings that live outside `package.json`: `allowBuilds: { esbuild: false }` (pnpm 12 fails the install on any dependency build script that is not approved, and esbuild's is not needed) and the `ai` override above.
 
@@ -35,8 +35,8 @@ agent/
 ├── tools/              run_dev_task, warm_sandbox             (phase 4)
 ├── schedules/          daily template maintenance             (phase 5)
 └── lib/                ALL real logic: pure, unit-tested
-scripts/                build post-processing (read on!)
-evals/                  routing evals
+scripts/                build post-processing, hashing, the orchestrate CLI
+evals/                  delegation and routing evals (docs/10-evals.md)
 docs/                   you are here
 ```
 
@@ -53,7 +53,7 @@ pnpm typecheck
 pnpm test
 ```
 
-Both must pass on a fresh clone — if they don't, stop and fix your environment before blaming the code.
+Both must pass on a fresh clone — if they don't, stop and fix your environment before blaming the code. `pnpm test` includes a docs-accuracy test that checks the scripts, paths, versions and environment variables the docs name. The evals are separate: `pnpm eval --list` shows them without running anything, and running them needs a decision described in [docs/10-evals.md](10-evals.md).
 
 For local model calls the loop needs Gateway auth (see [docs/01-prerequisites.md](01-prerequisites.md) §3). Copy [`.env.example`](../.env.example) to `.env.local` and set either `AI_GATEWAY_API_KEY`, or link the project first (step 5) and run `vercel env pull`. Then:
 

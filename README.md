@@ -6,6 +6,13 @@ a **cheap orchestration layer** (an AI-Gateway model driving the eve loop) and
 an **expensive execution layer** (real Claude Code, authenticated with a Claude
 **subscription** token, running inside a Vercel Sandbox via `@ai-sdk/harness`).
 
+The hybrid consumption pattern itself (an AI Gateway orchestrator that calls a
+tool, which runs subscription-authenticated Claude Code in a Vercel Sandbox) is
+this template's own convention. It is built on eve and the AI SDK harness
+packages (`@ai-sdk/harness`, `@ai-sdk/harness-claude-code`,
+`@ai-sdk/sandbox-vercel`); it is not an eve feature, and eve itself documents no
+subscription-auth path for its loop model.
+
 The pattern is domain-agnostic. It has been proven in production as a code-review
 QA agent and a ticket-triage agent; this template ships the same plumbing with
 the domain stripped out, ready to become a docs agent, an ops agent, a test
@@ -90,12 +97,19 @@ Why this shape works:
   from CI, including against a protection-gated preview deployment
   (`EVE_BYPASS_TOKEN`), so a dependency bump can be validated before it
   reaches production.
-- **`evals/` + `.github/workflows/`** — a routing eval, CI (typecheck + vitest
-  + instructions-hash gate), and two external crons with email alerting: a
-  health check (is it serving?) and a sandbox health check (can it actually
-  open a sandbox?). The second exists because the first cannot see the
-  difference.
-- **`docs/00`–`09`** — a complete, ordered setup manual.
+- **`evals/`** — a delegation eval and two routing evals, all tagged `fast`,
+  that stub the heavy tool so they cost one orchestrator turn each. `pnpm eval`
+  runs them; `pnpm eval --list` shows them without running anything. Stubbed
+  evals need the `allowToolStubs` grant, which the shipped
+  `agent/channels/eve.ts` does not give: that is an owner decision, described
+  in [`docs/10-evals.md`](docs/10-evals.md).
+- **`.github/workflows/`** — CI (typecheck, vitest, a build that fails on any
+  deprecation notice, and the instructions-hash gate), plus two external crons
+  with email alerting: a health check (is it serving?) and a sandbox health
+  check (can it actually open a sandbox?). The second exists because the first
+  cannot see the difference. Evals are not part of CI.
+- **`docs/`** — a complete, ordered setup manual, from
+  `docs/00-architecture.md` through `docs/10-evals.md`.
 - **`.claude/skills/hybrid-agent-setup/SKILL.md`** — a step-by-step setup flow
   any coding agent (Claude Code, Codex, Cursor) can follow to configure the
   template for your domain.
@@ -114,8 +128,8 @@ pointing at the relevant doc.
      `.claude/skills/hybrid-agent-setup/SKILL.md` — a strict 6-phase flow with
      verification gates.
    - **By hand**: read `docs/00-architecture.md` and
-     `docs/01-prerequisites.md`, then work through `docs/02`–`docs/07` in
-     order. Finish with the checklist in `docs/09-customization-checklist.md`.
+     `docs/01-prerequisites.md`, then work through
+     `docs/02-scaffold-and-deploy.md` to `docs/07-ops.md` in order. Finish with the checklist in `docs/09-customization-checklist.md`.
 4. Verify as you go: `pnpm typecheck && pnpm test`, deploy with
    `pnpm build` + `vercel deploy --prod`, and confirm
    `GET https://<deployment>/eve/v1/health` returns 200.
@@ -137,7 +151,8 @@ deprecated API is fixed in the bump that introduces the warning. A weekly
 Dependabot PR proposes these bumps (see [`docs/07-ops.md`](docs/07-ops.md),
 "Staying current"). pnpm 12 will not install a version published less than 24 h
 ago (`minimumReleaseAge`): if `pnpm install --frozen-lockfile` fails with
-`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, wait and re-run; do not bypass it.
+`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, never bypass the hold and never
+commit an exclude list: wait until that release is 24 h old, then re-run CI.
 
 ## Docs index
 
@@ -151,8 +166,9 @@ ago (`minimumReleaseAge`): if `pnpm install --frozen-lockfile` fails with
 | [`docs/05-dev-agent.md`](docs/05-dev-agent.md) | Phase 4 — harness anatomy, budgets, secrets, never-throw, the estate |
 | [`docs/06-sandbox-lifecycle.md`](docs/06-sandbox-lifecycle.md) | Phase 5 — the two lifecycles, teardown, retention, sweeps |
 | [`docs/07-ops.md`](docs/07-ops.md) | Phase 6 — Vercel env vars, CI, external health check, probe PR |
-| [`docs/08-extensions.md`](docs/08-extensions.md) | Optional — MCP connections, cross-session memory, evals, email |
+| [`docs/08-extensions.md`](docs/08-extensions.md) | Optional — MCP connections, cross-session memory, email |
 | [`docs/09-customization-checklist.md`](docs/09-customization-checklist.md) | The full checklist + definition of done |
+| [`docs/10-evals.md`](docs/10-evals.md) | Evals — what they cover, the stub pattern and its `allowToolStubs` prerequisite, `fast` and `live` tags, running them |
 
 ## Cost & billing — the honest version
 
@@ -176,9 +192,11 @@ places at once**. Know all three before deploying:
 3. **Vercel Sandbox compute + snapshot storage** — unavoidable. Forks are
    8-vCPU machines billed by the minute; template snapshots are multi-GB. The
    template creates forks non-persistent (no snapshot on teardown), destroys
-   each one after its run, and ships three sweeps — the healthy steady state
-   is **1 template sandbox + 1 template snapshot + nothing else**. Anything
-   beyond that is a leak; `docs/06-sandbox-lifecycle.md` tells you which
+   each one after its run, and ships three sweeps. The healthy steady state is
+   **1 harness template sandbox + 1 template snapshot + zero fork snapshots**,
+   plus eve's own per-session sandboxes and snapshots and its build-time
+   template snapshot, which eve manages and expires. Anything beyond that is a
+   leak; `docs/06-sandbox-lifecycle.md` tells you which
    mechanism missed it. The most expensive failure mode is a platform-timeout
    kill (up to 3 step retries × a fresh 8-vCPU sandbox), which is why the
    self-imposed ~700s budget is not negotiable.

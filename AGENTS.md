@@ -21,7 +21,7 @@ beat memory/training data every time:
 
 1. Start at `node_modules/eve/docs/README.md`.
 2. Then read the specific reference page for what you are about to write
-   (`reference/`, `channels/`, `tools/`, `schedules.mdx`, `sandbox.mdx`).
+   (`reference/`, `channels/`, `tools/`, `schedules.mdx`, `sandbox/`, `evals/`).
 
 Never invent eve APIs. Every `defineAgent` / `defineTool` / `defineSandbox` /
 `defineDynamic` / `githubChannel` usage must match the bundled docs.
@@ -36,7 +36,10 @@ Never invent eve APIs. Every `defineAgent` / `defineTool` / `defineSandbox` /
 - **All real logic lives in `agent/lib/` as pure functions** with vitest unit
   tests; `agent/tools/*.ts` and `agent/channels/*.ts` are thin wrappers. Keep
   it that way — it is what makes the agent testable without deploys.
-- Verify your work: `pnpm typecheck && pnpm test` after every change.
+- Verify your work: `pnpm typecheck && pnpm test` after every change. The
+  tests include `agent/lib/docs-accuracy.test.ts`, which fails when a doc names
+  a script, path, version or environment variable that does not exist: change
+  the doc in the same commit as the thing it describes.
 - Customization points in code are marked with `// CUSTOMIZE:` comments that
   point to the relevant `docs/NN-*.md` page. Edit at those markers; do not
   rewrite the load-bearing plumbing around them.
@@ -57,13 +60,15 @@ Never invent eve APIs. Every `defineAgent` / `defineTool` / `defineSandbox` /
 | `docs/07-ops.md` | Phase 6 |
 | `docs/08-extensions.md` | Optional extensions |
 | `docs/09-customization-checklist.md` | Definition of done |
+| `docs/10-evals.md` | Evals: the stub pattern, `allowToolStubs`, `fast`/`live` tags, running them |
 
 ## 5. Hard constraints
 
-There are 12 hard constraints (each one cost a real production debugging
+There are 15 hard constraints (each one cost a real production debugging
 session in the reference implementation). The condensed list lives in
 `.claude/skills/hybrid-agent-setup/SKILL.md` under "Hard constraints"; the full
-rationale for each is spread across `docs/00`–`docs/07`. Violating any of them
+rationale for each is spread across `docs/00-architecture.md` to
+`docs/07-ops.md`. Violating any of them
 produces silent breakage or cost leaks — read the list before changing
 `agent/lib/dev-agent.ts`, `agent/sandbox.ts`, `agent/agent.ts`,
 `agent/channels/github.ts`, or `package.json` scripts.

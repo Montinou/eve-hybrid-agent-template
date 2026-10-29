@@ -78,7 +78,6 @@ explicit mode, re-routing billing just as quietly.
 The lib still *guards* the token's presence and fails loudly (with a
 structured `failed` result, see below) when it's missing. This is the only
 place in the whole system where the subscription token does anything.
-place in the whole system where the subscription token does anything.
 
 ## Time budget discipline
 
