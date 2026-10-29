@@ -28,7 +28,7 @@ GitHub webhook ──► eve channel (deterministic dispatch, pure functions)
                      │  resolves context the sandbox can't reach,
                      │  builds the prompt, NEVER puts secrets in it
                      ▼
-              dev-agent: HarnessAgent + createClaudeCode + createVercelSandbox
+              dev-agent: HarnessAgent + createClaudeCode + createVercelNetworkSandboxSession
               — real Claude Code CLI, subscription auth (ANTHROPIC_AUTH_TOKEN),
                 running INSIDE the sandbox against a pre-cloned repo estate
               — persistent template snapshot (warmed out-of-band) → fork per run
@@ -74,13 +74,14 @@ Why this shape works:
   Claude Code task against a repo of your estate). Clone it into your own
   domain capabilities.
 - **`agent/tools/warm_sandbox.ts` + `agent/schedules/template-maintenance.md`**
-  — out-of-band warming of BOTH templates and daily snapshot/cost sweeps.
-- **`agent/lib/eve-sandbox.ts`** — keeps eve's *own* sandbox template alive.
-  eve provisions that template only during a build and cannot reprovision it
-  on a deployment, so when its snapshot lapses the agent silently loses repo
-  access — health endpoint still green — until someone redeploys. This renews
-  it, fires a Deploy Hook when it is already gone, and sweeps dead session
-  records that would otherwise pin a session to a sandbox that cannot resume.
+  — out-of-band warming of the dev-agent's harness template and daily
+  snapshot/cost sweeps.
+- **`.github/workflows/sandbox-health.yml`** — watches eve's *own* sandbox
+  template from outside. eve records that template as a snapshot during a
+  build and never recreates it at runtime, so when its snapshot lapses the
+  agent silently loses repo access — health endpoint still green — until
+  someone redeploys. The probe makes the agent open a sandbox and alerts when
+  it cannot.
 - **`agent/lib/estate.ts`** — the repo registry: which repos the agent may
   touch, on which branch, with which package manager and runtime.
 - **`scripts/copy-bridge-assets.mjs`** — the mandatory post-build step that
@@ -148,14 +149,16 @@ places at once**. Know all three before deploying:
    the pattern: frontier-model work at subscription prices instead of API
    prices. Caveats: the `claude setup-token` OAuth token **expires ~1 year
    after issuance and nothing alerts you** — calendar the rotation. And the
-   token lives inside a sandbox that processes untrusted content (PR diffs,
-   comments); the blast radius is your subscription quota, not org data, but
-   state that trade-off explicitly in your own security review.
+   token stays on the host (the sandbox gets a placeholder that the host swaps
+   for the real bearer at egress), but code in a sandbox that processes
+   untrusted content (PR diffs, comments) can still use it toward the
+   Anthropic API; the blast radius is your subscription quota, not org data,
+   but state that trade-off explicitly in your own security review.
 3. **Vercel Sandbox compute + snapshot storage** — unavoidable. Forks are
    8-vCPU machines billed by the minute; template snapshots are multi-GB. The
-   template ships retention (`keepLastSnapshots: 2`), a fork-teardown patch
-   that avoids pointless snapshots, and three sweeps — the healthy steady state
-   is **1 template sandbox + ≤2 template snapshots + nothing else**. Anything
+   template creates forks non-persistent (no snapshot on teardown), destroys
+   each one after its run, and ships three sweeps — the healthy steady state
+   is **1 template sandbox + 1 template snapshot + nothing else**. Anything
    beyond that is a leak; `docs/06-sandbox-lifecycle.md` tells you which
    mechanism missed it. The most expensive failure mode is a platform-timeout
    kill (up to 3 step retries × a fresh 8-vCPU sandbox), which is why the

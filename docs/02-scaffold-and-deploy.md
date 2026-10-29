@@ -80,14 +80,14 @@ Look at the build script in [`package.json`](../package.json):
 
 **Never run bare `eve build` for a deployment of this template.** Here's why (gotcha #2, found in production):
 
-- The dev-agent runs Claude Code through `@ai-sdk/harness-claude-code`, whose sandbox *bridge* consists of code **plus data files** (`package.json`, `pnpm-lock.yaml`, `index.mjs`) that it loads at runtime relative to the bundled module.
+- The dev-agent runs Claude Code through `@ai-sdk/harness-claude-code`, whose sandbox *bridge* consists of code **plus data files** (`package.json`, `pnpm-lockfile.yaml`, `pnpm-workspace.yaml`, `index.mjs`) that it loads at runtime relative to the bundled module.
 - eve's bundler inlines the bridge's **code** but does not copy its **data files**. The bundle builds green, deploys green, and then every dev-agent run dies at runtime with `ENOENT` when the bridge tries to read its assets.
-- [`scripts/copy-bridge-assets.mjs`](../scripts/copy-bridge-assets.mjs) fixes this after `eve build`, and it must handle **both** output trees, because only one of them actually deploys depending on where the build runs:
-  - `.vercel/output/functions/*.func/_libs` — the Vercel Build Output tree, produced on hosted builds (when the `VERCEL` env var is set). The `.func` dir is what becomes `/var/task` at runtime. On hosted builds the script *hard-fails* if this tree exists without a `_libs` dir — a deployable bundle without bridge assets must never ship.
-  - `.output/server/_libs` — the local/self-host Nitro tree from a plain `eve build`.
+- [`scripts/copy-bridge-assets.mjs`](../scripts/copy-bridge-assets.mjs) fixes this after `eve build`. It finds every bundled module that loads the bridge (each resolves `./bridge/<asset>` against its own directory: `_chunks/` under eve 0.89, `_libs/` under older eve) and copies the assets beside it. It must handle **both** output trees, because only one of them actually deploys depending on where the build runs:
+  - `.vercel/output/functions/*.func/` — the Vercel Build Output tree, produced on hosted builds (when the `VERCEL` env var is set). The `.func` dir is what becomes `/var/task` at runtime. On hosted builds the script *hard-fails* if this tree exists without a module that loads the bridge — a deployable bundle without bridge assets must never ship.
+  - `.output/server/` — the local/self-host Nitro tree from a plain `eve build`; the script fails here too when no module loads the bridge.
 - The same pass patches the server function's `maxDuration` to **800** in `.vc-config.json`: eve sets the workflow function to the max but leaves the server function at the 300s default, which would strangle channel-side turns.
 
-Vercel runs `pnpm build` (the whole script) on hosted builds, so as long as you never change that script line, you're covered. If you ever see `ENOENT ... _libs/bridge/...` in production logs, someone changed it.
+Vercel runs `pnpm build` (the whole script) on hosted builds, so as long as you never change that script line, you're covered. If you ever see `ENOENT ... bridge/...` in production logs, someone changed it, or the bundle layout moved in a way the script did not detect.
 
 ## 5. Link and deploy
 

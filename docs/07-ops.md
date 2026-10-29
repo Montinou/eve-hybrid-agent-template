@@ -94,12 +94,17 @@ stayed green, because the tools needing a checkout degraded honestly instead of
 erroring.
 
 [`.github/workflows/sandbox-health.yml`](../.github/workflows/sandbox-health.yml)
-closes that gap. It runs an hour after the daily maintenance schedule, asks the
-agent to warm and report one machine-readable line, and alerts when the answer
-is missing *or* unhealthy — "could not confirm" is not "fine". It needs one
+closes that gap. Once a day it asks the agent to run `echo SANDBOX_OK` through
+its built-in `bash` tool and report one machine-readable line. That opens a
+sandbox for the probe's new session, created from eve's build-time template
+snapshot — exactly the path that fails once that snapshot has expired
+(*"The runtime never recreates a template. Run `eve build` again and deploy its
+output"*, eve's `sandbox/troubleshooting.mdx`). It alerts when the answer is
+missing *or* unhealthy — "could not confirm" is not "fine" — and the repair is a
+redeploy ([docs/06-sandbox-lifecycle.md](06-sandbox-lifecycle.md)). It needs one
 extra secret beyond the health check's (`AGENT_API_KEY`, the eve channel's
-key), and it is external for the same reason: a schedule that stopped firing
-cannot report that it stopped firing.
+key), and it is external for the same reason: an agent that cannot open a
+sandbox cannot report that it cannot.
 
 ## Validate a branch against its preview before merging
 
@@ -170,6 +175,14 @@ cheap, unambiguous, and worth doing after every dependency bump of
   ping step passes; if Resend is configured, temporarily point `EVE_HEALTH_URL` at
   a bogus path and confirm the alert email arrives, then restore it.
 - The E2E probe PR passes the four checks above.
+- **Owner checkpoint: one preview deploy to verify the bridge assets.** The
+  hosted build output (`.vercel/output/functions/*.func`) cannot be produced
+  locally without real Vercel credentials, so after any change to
+  `scripts/copy-bridge-assets.mjs`, an eve bump or an
+  `@ai-sdk/harness-claude-code` bump, deploy one preview and confirm the build
+  log shows `[copy-bridge-assets] bridge assets → …/<fn>.func/…/bridge` (and no
+  `refusing to ship`), then run one `warm_sandbox` against that preview (see
+  above). A missing line means the dev-agent will fail with `ENOENT … bridge/…`.
 
 Next: [docs/08-extensions.md](08-extensions.md) (optional add-ons) and
 [docs/09-customization-checklist.md](09-customization-checklist.md) (the full

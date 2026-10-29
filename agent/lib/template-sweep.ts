@@ -4,8 +4,10 @@ import { Sandbox, Snapshot } from "@vercel/sandbox";
 //
 // Background: when the dev-agent's bootstrap hash changes (a RECIPE_VERSION
 // bump, or enabling a new estate repo), @ai-sdk/harness's
-// prepareHarnessSandboxTemplate derives a NEW opaque template sandbox name
-// (`ai-sdk-harness-<identity>` — see below) instead of reusing the old one.
+// createHarnessSandboxTemplate derives a NEW template identity, and
+// @ai-sdk/sandbox-vercel's createVercelNetworkSandboxSession turns it into a
+// NEW opaque template sandbox name (`ai-sdk-harness-v<N>-<digest>` — see
+// below) instead of reusing the old one.
 // The old named sandbox and its snapshots then orphan forever unless swept:
 // `vercel sandbox remove <name>` does not reliably cascade-delete that
 // sandbox's own snapshots (observed still `created`, not `deleted`, minutes
@@ -29,9 +31,9 @@ import { Sandbox, Snapshot } from "@vercel/sandbox";
 // mechanism that invalidates the template when the recipe changes (Vercel's
 // `getOrCreate` only runs `onCreate`/the bootstrap recipe on a genuinely NEW
 // name — a stable name would silently keep resuming a stale-recipe sandbox
-// forever). So: since warmSandboxTemplate() always calls
-// prepareHarnessSandboxTemplate() (which creates-or-resumes/touches the
-// CURRENT template) immediately before sweepStaleTemplates() runs, "current"
+// forever). So: since warmSandboxTemplate() always creates (or reuses) the
+// CURRENT template and forks it immediately before sweepStaleTemplates()
+// runs, "current"
 // is identified empirically as the most-recently-updated genuine template
 // name among this app's tagged sandboxes — everything else shaped like a
 // template is an orphan from a prior identity and gets swept.
@@ -56,17 +58,19 @@ export interface SandboxListItem {
 }
 
 /**
- * Literal replication of @ai-sdk/sandbox-vercel's private naming constants
+ * Template names come from @ai-sdk/sandbox-vercel's private naming
  * (`node_modules/@ai-sdk/sandbox-vercel/src/vercel-sandbox.ts`:
- * `TEMPLATE_NAME_PREFIX = 'ai-sdk-harness'`, `SESSION_NAME_PREFIX =
- * 'ai-sdk-harness-session'`). Not exported by that package either, so this
- * is fragile against an upstream rename — if the sweep silently stops
- * matching any sandbox after a dependency bump, re-verify these two strings
- * first. Last re-verified against @ai-sdk/sandbox-vercel 1.0.64 (both
- * unchanged).
+ * `ai-sdk-harness-v${TEMPLATE_VERSION}-<digest>`), replicated here as a
+ * prefix because the package does not export it — fragile against an
+ * upstream rename, so if the sweep silently stops matching any sandbox
+ * after a dependency bump, re-verify this string first (last verified
+ * against @ai-sdk/sandbox-vercel 1.0.168). Fork names are this app's own:
+ * dev-agent.ts's devForkSandboxId() passes
+ * `ai-sdk-harness-session-<sessionId>` as the fork's `sandboxId`, keeping
+ * the prefix the pre-1.0.168 provider used.
  */
 const HARNESS_TEMPLATE_NAME_PREFIX = "ai-sdk-harness-";
-const HARNESS_SESSION_NAME_PREFIX = "ai-sdk-harness-session-";
+export const HARNESS_SESSION_NAME_PREFIX = "ai-sdk-harness-session-";
 
 /** True for a genuine template sandbox name, false for a per-run forked session. */
 export function isHarnessTemplateName(name: string): boolean {
@@ -77,7 +81,7 @@ export function isHarnessTemplateName(name: string): boolean {
 }
 
 /**
- * The tag key/value dev-agent.ts's `makeSandboxProvider()` sets on every
+ * The tag key/value dev-agent.ts's `buildDevSandboxCreateOptions()` sets on every
  * sandbox this app creates. Tags are what make the sweeps and dashboard
  * filtering possible at all — never remove them.
  */
@@ -264,15 +268,15 @@ async function deleteSnapshotsForSandbox(
 }
 
 /**
- * Per-run fork cleanup: the harness session's `destroy()` is
+ * Per-run fork cleanup, a backstop: the network session's `destroy()` is
  * `sandbox.stop()` THEN `sandbox.delete()`
- * (node_modules/@ai-sdk/sandbox-vercel/dist/index.js), and `stop()` always
- * mints a full-size (multi-GB) snapshot that `delete()` does NOT
- * cascade-remove — so every properly-destroyed per-run fork would leak one
- * snapshot (observed live in the reference deployment: 4 orphans across one
- * E2E session) if dev-agent.ts's teardown patch didn't exist. A failed
- * `createSession` leaks the WHOLE stopped fork sandbox plus its snapshot
- * (nothing ever calls destroy on it). This targets exactly one fork by its
+ * (node_modules/@ai-sdk/sandbox-vercel/src/vercel-network-sandbox-session.ts).
+ * On a PERSISTENT sandbox `stop()` mints a full-size (multi-GB) snapshot
+ * that `delete()` does NOT cascade-remove (observed live in the reference
+ * deployment: 4 orphans across one E2E session); dev-agent.ts creates forks
+ * with `persistent: false` so none is minted, and this sweep catches
+ * anything that still appears. A failed start can leave the WHOLE fork
+ * sandbox behind (`deleteSandbox`). This targets exactly one fork by its
  * deterministic sandbox name (`ai-sdk-harness-session-<sessionId>`, the
  * private naming replicated in HARNESS_SESSION_NAME_PREFIX above) — NEVER a
  * broad snapshot listing: eve's own channel/session snapshots share the
@@ -323,8 +327,8 @@ export const MIN_ORPHAN_SNAPSHOT_AGE_MS = 30 * 60 * 1000;
 
 /**
  * Deferred cleanup for fork stop-snapshots that outlived their deleted
- * sandbox (the publish race above, plus anything the teardown patch's
- * fallback path minted).
+ * sandbox (the publish race above, for any fork that was persistent or
+ * minted one anyway).
  *
  * Safety model — the ONLY deletion criterion is "the snapshot's source
  * session belongs to NO listed sandbox":
@@ -398,8 +402,8 @@ export async function sweepOrphanForkSnapshots(options?: {
  * its snapshots before deleting the sandbox itself. Fail-soft by design:
  * EVERY failure (listing, per-sandbox get/delete, per-snapshot
  * list/get/delete) is caught and appended to `errors` — this function never
- * throws. Call only after `prepareHarnessSandboxTemplate()` has
- * created/confirmed the current template for this invocation (see the module
+ * throws. Call only after warmSandboxTemplate() has created/confirmed the
+ * current template for this invocation (see the module
  * header comment for why that ordering matters for identifying "current").
  */
 export async function sweepStaleTemplates(params: {

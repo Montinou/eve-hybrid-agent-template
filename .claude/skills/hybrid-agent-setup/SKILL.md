@@ -281,28 +281,29 @@ mystery costs.
 
 - Daily maintenance time (Vercel evaluates schedule crons in UTC; default
   `0 7 * * *` = 07:00 UTC).
-- Accept default expirations? `SANDBOX_IDLE_TIMEOUT_MS` 300000,
-  `SANDBOX_SNAPSHOT_EXPIRATION_MS` 7d, `TEMPLATE_SNAPSHOT_EXPIRATION_MS` 7d
-  (the last one is the harness knob — distinct lifecycle), and
-  `EVE_TEMPLATE_SNAPSHOT_EXPIRATION_MS` 30d for eve's own template.
+- Accept default lifetimes and expirations? `SANDBOX_TIMEOUT_MS` 1800000
+  (a hard sandbox lifetime, floored at 800000; the old name
+  `SANDBOX_IDLE_TIMEOUT_MS` is still accepted), `SANDBOX_SNAPSHOT_EXPIRATION_MS`
+  7d, and `TEMPLATE_SNAPSHOT_EXPIRATION_MS` 7d (the harness knob — distinct
+  lifecycle).
   **Never talk them into shortening `SANDBOX_SNAPSHOT_EXPIRATION_MS` to save
-  storage:** it governs eve's TEMPLATE too, and a short TTL turns a quiet week
-  into a silent outage (Hard constraint 13).
-- Deploy Hook URL for `EVE_DEPLOY_HOOK_URL` (Project → Settings → Git → Deploy
-  Hooks, production branch). Without it the agent cannot self-heal a lapsed
-  eve template — it just reports the problem and waits for a human.
+  storage:** it governs eve's build-time TEMPLATE snapshot too, and a short TTL
+  turns a quiet week into a silent outage (Hard constraint 13).
+- Who redeploys when the sandbox-health probe alerts? A lapsed eve template
+  is repaired only by a redeploy; nothing in the agent does it automatically.
 
 **Files to edit:**
 
 - `agent/sandbox.ts` — knobs only; the `git config --global --add
-  safe.directory /workspace` line in `onSession` must stay (Hard constraint 9).
+  safe.directory /workspace` line in the `defineSandbox` selector must stay
+  (Hard constraint 9).
 - `agent/schedules/template-maintenance.md` — set the cron; confirm the task
   body names the shipped tool (`warm_sandbox`) exactly.
 - `agent/lib/template-sweep.ts` — no edits; verify it is wired into the warm
   path and the schedule.
-- `agent/lib/eve-sandbox.ts` — no edits; verify `warm_sandbox` calls
-  `warmEveSandboxTemplate` and that `EVE_DEPLOY_HOOK_URL` is set. This module
-  covers the failure the health endpoint cannot see (Hard constraint 13).
+- `.github/workflows/sandbox-health.yml` — no edits; configure its vars and
+  secrets (docs/07-ops.md). It covers the failure the health endpoint cannot
+  see (Hard constraint 13).
 
 **Commands to run:**
 
@@ -315,15 +316,14 @@ Trigger the maintenance schedule (or wait for its slot), then inspect the
 Vercel sandbox/snapshot inventory.
 
 **Verification gate:** after one full `run_dev_task` run plus one maintenance
-pass, the inventory matches steady state — **1 harness template sandbox + ≤2
-template snapshots + 1 eve template WITH A LIVE SNAPSHOT + nothing else
-lingering.** Anything extra is a leak: identify which mechanism (retention,
-teardown patch, sweeps) missed it. An eve template with **zero** live snapshots
-is not a leak but an outage in waiting — the next turn will have no checkout,
-and nothing will say so.
+pass, the inventory matches steady state — **1 harness template sandbox + 1
+template snapshot + zero fork snapshots + nothing else lingering.** Anything
+extra is a leak: identify which mechanism (non-persistent forks, explicit fork
+destroy, sweeps) missed it.
 
-Confirm the maintenance run reported `eve.healthy: true`, not just that it
-finished.
+Confirm the maintenance run reported `warmed: true`, not just that it
+finished, and dispatch `sandbox-health.yml` once by hand: it must report
+`EVE_SANDBOX_STATUS=healthy`.
 
 ---
 
@@ -376,9 +376,9 @@ statuses. **The agent is not "done" until a full probe PR passed.**
    gateway credentials (automatic OIDC on Vercel) outrank
    `ANTHROPIC_AUTH_TOKEN`, and the nested agent silently bills Opus through
    the AI Gateway at API prices (real US$7.79/week leak, caught 2026-07-27).
-   The object form (`{ anthropic: { authToken } }`) resolves identically but
-   is deprecated — and is silently ignored by versions predating it.
-   Precedence re-verified at 1.0.42, 1.0.65 and 1.0.88; keep
+   The old nested object form (`{ anthropic: { authToken } }`) is rejected
+   by 1.0.172, where an object `auth` must be a flat string record.
+   Precedence re-verified at 1.0.42, 1.0.65, 1.0.88 and 1.0.172; keep
    `harness-auth-contract.test.ts` so the next bump has to re-verify too.
    Detection: `anthropic/claude-*` rows attributed to the project in the AI
    Gateway dashboard — subscription traffic never appears there.
@@ -389,12 +389,14 @@ statuses. **The agent is not "done" until a full probe PR passed.**
 3. **Sandbox runtime matches the TARGET repo's engines pin**, not the agent's
    node 24. One shared template = one runtime; diverging pins need per-repo
    node inside the recipe.
-4. **Fork teardown calls `sandbox.delete()` directly.** `stop()` mints a
-   full-size snapshot that `delete()` does NOT cascade-remove — pure waste for
-   a throwaway fork. The patch ships in `dev-agent.ts`; don't remove it.
-5. **`keepLastSnapshots: { count: 2 }` — never 1.** The provider caches the
-   template snapshotId in memory per function instance; count 1 deletes it out
-   from under warm instances and poisons their forks.
+4. **Forks are created with `persistent: false`.** A persistent sandbox's
+   `stop()` mints a full-size snapshot that `delete()` does NOT cascade-remove —
+   pure waste for a throwaway fork. `buildDevSandboxCreateOptions()` in
+   `dev-agent.ts` sets it, and the dev-agent destroys every fork it creates.
+5. **Build forks with `createVercelNetworkSandboxSession`, not the deprecated
+   `createVercelSandbox`.** The network session is what keeps the subscription
+   token on the host (egress brokering through `addRequestTransformations`);
+   `harness-auth-contract.test.ts` pins it.
 6. **Model routing memoizes per turn (`ctx.turn?.id`), not per session** —
    durable sessions mix turn kinds, and a session-keyed memo pins whichever
    model came first forever.
@@ -406,7 +408,8 @@ statuses. **The agent is not "done" until a full probe PR passed.**
    orphans a half-created sandbox under that name and reuse 400s forever.
    Sweep on `createSession` failure too.
 9. **eve channel sandbox needs
-   `git config --global --add safe.directory /workspace`** in `onSession`
+   `git config --global --add safe.directory /workspace`** in its
+   `defineSandbox` selector, after `environment.open()`
    (/workspace is uid 1001, commands run as root → "dubious ownership" kills
    every checkout).
 10. **Self-terminate at ~700s with a partial result.** A platform kill loses
@@ -420,15 +423,14 @@ statuses. **The agent is not "done" until a full probe PR passed.**
     otherwise webhooks simply never arrive.
 
 13. **eve's own sandbox template dies silently, and only a build can revive
-    it.** eve provisions it during a build; its snapshot expires on a timer;
-    and eve's in-process repair is gated on local development, so on a
-    deployment the failure is rethrown forever. `/eve/v1/health` keeps
-    answering 200 the whole time while every turn runs without a repo
-    checkout. Renew it on a schedule, fire a Deploy Hook when it is already
-    gone, sweep dead session records (they pin a session to a sandbox that
-    cannot resume), and probe it externally. `stop()` alone does NOT give a
-    template a fresh TTL — only `snapshot({expiration})` +
-    `update({currentSnapshotId})` does.
+    it.** `eve build` records it as a snapshot; the snapshot expires after
+    `SANDBOX_SNAPSHOT_EXPIRATION_MS` without use; and "The runtime never
+    recreates a template. Run `eve build` again and deploy its output" (eve's
+    sandbox troubleshooting doc). `/eve/v1/health` keeps answering 200 the
+    whole time while no new session can open a sandbox. Keep the TTL long
+    enough to cover your quietest week, probe it externally
+    (`sandbox-health.yml`), and redeploy when it alerts. Never fire a deploy
+    hook from a routine warm.
 14. **Channels steer by default; queue instead.** Since eve 0.33 a message
     arriving mid-turn CANCELS that turn, and completed side effects are not
     rolled back — a push landing during a long run abandons a booted sandbox.

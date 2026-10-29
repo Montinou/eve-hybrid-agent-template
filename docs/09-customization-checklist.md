@@ -39,7 +39,7 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 | `GITHUB_APP_INSTALLATION_ID` | git creds | optional; auto-discovered otherwise |
 | `GITHUB_TOKEN` | git creds | optional PAT fallback |
 | `DEV_AGENT_TIME_BUDGET_MS` | dev-agent | 700000; hard-clamped to 750000 in code |
-| `SANDBOX_IDLE_TIMEOUT_MS` | eve channel sandbox | 300000 (5 min) |
+| `SANDBOX_TIMEOUT_MS` | eve channel sandbox | 1800000 (30 min); a hard lifetime, floored at 800000; `SANDBOX_IDLE_TIMEOUT_MS` still accepted as an alias |
 | `SANDBOX_SNAPSHOT_EXPIRATION_MS` | eve channel sandbox | 7 days |
 | `TEMPLATE_SNAPSHOT_EXPIRATION_MS` | harness template | 7 days — **distinct lifecycle** from the previous knob |
 | `RECIPE_VERSION` | harness template | bump on any sandbox-recipe change |
@@ -118,22 +118,20 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
   - [ ] Per-repo forbidden zones in the per-repo skill markdown (tunable without
         a redeploy)
   - [ ] PRs open as **drafts**; no merge tool exists anywhere in the agent
-- [ ] **Gate:** `warm_sandbox` returns `ready: true`; a real `run_dev_task` probe
+- [ ] **Gate:** `warm_sandbox` returns `warmed: true`; a real `run_dev_task` probe
       returns a structured result on the PR
 
 ## Phase 5 — Lifecycle + cost hygiene ([docs/06-sandbox-lifecycle.md](06-sandbox-lifecycle.md))
 
-- [ ] Sandbox knobs reviewed (defaults are sane); `keepLastSnapshots` still
-- [ ] `EVE_DEPLOY_HOOK_URL` set to a production-branch Deploy Hook — the
-      only supported way to reprovision eve's own template once its snapshot
-      lapses (docs/06-sandbox-lifecycle.md)
+- [ ] Sandbox knobs reviewed (defaults are sane); dev-agent forks still
+      created with `persistent: false`
 - [ ] Daily `template-maintenance` schedule deployed and observed running:
-      its `eve` result must report `healthy: true`
-- [ ] Weekly job (if you have one) calls `warm_sandbox` with `deep: true`
+      it must report `warmed: true`
+- [ ] `.github/workflows/sandbox-health.yml` configured; you know the repair
+      for a lapsed eve template is a redeploy (docs/06-sandbox-lifecycle.md)
 - [ ] `SANDBOX_SNAPSHOT_EXPIRATION_MS` NOT shortened to "save storage" —
-      it governs the template too, and a short TTL turns a quiet week into
-      an outage
-      `{ count: 2 }`; fork-teardown patch untouched
+      it governs eve's build-time template snapshot too, and a short TTL
+      turns a quiet week into an outage
 - [ ] `agent/schedules/template-maintenance.md` cron set to a suitable slot
       (Vercel evaluates schedule crons in UTC)
 - [ ] `RECIPE_VERSION` set; bumped after any recipe edit you made in phase 4

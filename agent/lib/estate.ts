@@ -39,11 +39,13 @@ export const ESTATE_ROOT = "/vercel/sandbox/estate";
  * Forward note: `@vercel/sandbox` 3.0.0 DEPRECATED `runtime` in favor of
  * Vercel Managed Images (`image: "vercel/sandbox/node:24"`, defaulting to the
  * Ubuntu-based `vercel/sandbox/universal`), and passing both is an error.
- * Runtime ids stay supported through the legacy v2 create API, and the option
- * this value actually feeds is `createVercelSandbox({ runtime })` in
- * dev-agent.ts — owned by `@ai-sdk/sandbox-vercel`, which still resolves
- * `@vercel/sandbox` ^2 for itself. So `runtime` remains the correct spelling
- * here; revisit this type only once that package exposes an `image` option.
+ * `runtime` still works in @vercel/sandbox 3.9.1 (typed `@deprecated Use
+ * \`image\` instead`, no runtime warning), and the option this value feeds
+ * is `buildDevSandboxCreateOptions()` in dev-agent.ts, passed to
+ * `createVercelNetworkSandboxSession`, which accepts either `runtime` or
+ * `image`. Moving to `image` changes the base OS image of every dev-agent
+ * sandbox (CA bundle paths, package managers), so it is a recipe change of
+ * its own: bump RECIPE_VERSION and re-verify the CA prelude when you make it.
  */
 export type SandboxRuntime = "node22" | "node24" | "node26" | (string & {});
 

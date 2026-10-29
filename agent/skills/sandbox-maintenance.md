@@ -21,8 +21,13 @@ budget, so the template is warmed OUT of band and the runs only fork it.
    var, or the code default in `lib/dev-agent.ts`) — the next warm rebuilds
    automatically.
 4. **Steady-state inventory** (report deviations, never mass-delete):
-   1 template sandbox + at most 2 template snapshots + nothing else
-   lingering. Sweeps run inside the warm itself (`lib/template-sweep.ts`).
+   1 template sandbox + 1 template snapshot + zero fork snapshots (forks are
+   non-persistent) + nothing else lingering. Sweeps run inside the warm itself
+   (`lib/template-sweep.ts`).
+5. **eve's own sandbox is not this skill's job:** if the agent itself cannot
+   open a sandbox ("Sandbox template ... is not available to this runtime"),
+   eve's build-time template snapshot has lapsed and only a redeploy fixes it.
+   Say so plainly; `warm_sandbox` cannot repair it.
 
 ## Failure interpretation
 

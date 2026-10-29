@@ -1,6 +1,9 @@
 // eve's bundler inlines @ai-sdk/harness-claude-code's CODE but not its bridge
-// DATA files (package.json, pnpm-lock.yaml, index.mjs), which readBridgeAsset()
-// loads at runtime relative to the bundled module (/var/task/_libs/bridge/).
+// DATA files (package.json, pnpm-lockfile.yaml, pnpm-workspace.yaml, index.mjs
+// in dist/bridge/ — the list readBridgeAsset() maps in the package's
+// dist/index.js), which readBridgeAsset()
+// loads at runtime relative to the bundled module that contains it
+// (e.g. /var/task/_chunks/bridge/ under eve 0.89).
 // Without this step, any harness-backed tool fails at runtime with ENOENT.
 // That's why the build script is `eve build && node scripts/copy-bridge-assets.mjs`
 // — NEVER bare `eve build` (gotcha 2 in the hybrid-agent pattern).
@@ -21,7 +24,7 @@
 // hosted-build case where a Vercel Build Output tree without bridge assets
 // must never ship. Locally (`VERCEL` unset), the `.vercel/output` tree simply
 // won't exist, and that's expected, not an error; we still always handle the
-// `.output/server/_libs` tree unconditionally when present.
+// `.output/server` tree unconditionally when present.
 import {
   cpSync,
   existsSync,
@@ -33,7 +36,10 @@ import {
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)));
+// The project root: the script's parent directory, or an explicit path as
+// the first argument (agent/lib/copy-bridge-assets.test.ts runs it against
+// a fixture tree).
+const root = process.argv[2] ?? dirname(dirname(fileURLToPath(import.meta.url)));
 const src = join(root, "node_modules/@ai-sdk/harness-claude-code/dist/bridge");
 
 if (!existsSync(src)) {
@@ -41,10 +47,20 @@ if (!existsSync(src)) {
   process.exit(1);
 }
 
-function copyTo(libsDir) {
-  const dest = join(libsDir, "bridge");
+// Every bundled module that loads the bridge resolves `./bridge/<asset>`
+// against its OWN directory (`new URL("./bridge/...", import.meta.url)` in
+// @ai-sdk/harness-claude-code's dist/index.js), so the assets must sit beside
+// each such module — wherever the bundler put it. eve 0.44 bundled it under
+// `_libs/`; eve 0.89 inlines it into `_chunks/node-server.mjs`. Locating the
+// referencing modules instead of hard-coding a directory survives the next
+// bundler layout change.
+const BRIDGE_ASSETS = ["package.json", "pnpm-lockfile.yaml", "pnpm-workspace.yaml", "index.mjs"];
+const BRIDGE_MARKER = '"./bridge/pnpm-lockfile.yaml"';
+
+function copyTo(dir) {
+  const dest = join(dir, "bridge");
   cpSync(src, dest, { recursive: true });
-  for (const f of ["package.json", "pnpm-lock.yaml", "index.mjs"]) {
+  for (const f of BRIDGE_ASSETS) {
     if (!existsSync(join(dest, f))) {
       console.error(`[copy-bridge-assets] missing after copy: ${join(dest, f)}`);
       process.exit(1);
@@ -53,18 +69,30 @@ function copyTo(libsDir) {
   console.log(`[copy-bridge-assets] bridge assets → ${dest}`);
 }
 
-function findFuncLibsDirs(dir, depth = 0) {
+/** Directories (under `tree`) holding a bundled module that loads the bridge. */
+function findBridgeReferrerDirs(tree, depth = 0) {
+  if (depth > 6 || !existsSync(tree)) return [];
+  const results = new Set();
+  for (const entry of readdirSync(tree)) {
+    const full = join(tree, entry);
+    if (statSync(full).isDirectory()) {
+      if (entry === "bridge" || entry === "node_modules") continue;
+      for (const d of findBridgeReferrerDirs(full, depth + 1)) results.add(d);
+    } else if (entry.endsWith(".mjs") || entry.endsWith(".js")) {
+      if (readFileSync(full, "utf8").includes(BRIDGE_MARKER)) results.add(tree);
+    }
+  }
+  return [...results];
+}
+
+function findFuncDirs(dir, depth = 0) {
   if (depth > 4 || !existsSync(dir)) return [];
   const results = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (!statSync(full).isDirectory()) continue;
-    if (entry.endsWith(".func")) {
-      const libs = join(full, "_libs");
-      if (existsSync(libs)) results.push(libs);
-    } else {
-      results.push(...findFuncLibsDirs(full, depth + 1));
-    }
+    if (entry.endsWith(".func")) results.push(full);
+    else results.push(...findFuncDirs(full, depth + 1));
   }
   return results;
 }
@@ -76,26 +104,28 @@ let copies = 0;
 // linked local `vercel build` runs); see the file-level comment above.
 const vercelFns = join(root, ".vercel/output/functions");
 if (existsSync(vercelFns)) {
-  const libsDirs = findFuncLibsDirs(vercelFns);
-  if (libsDirs.length === 0) {
+  const funcDirs = findFuncDirs(vercelFns);
+  const targets = funcDirs.flatMap((d) => findBridgeReferrerDirs(d));
+  if (targets.length === 0) {
     if (process.env.VERCEL) {
       console.error(
-        `[copy-bridge-assets] ${vercelFns} exists but no *.func/_libs dir found — refusing to ship a bundle without bridge assets`,
+        `[copy-bridge-assets] ${vercelFns} exists but no *.func module loads the bridge — refusing to ship a bundle without bridge assets`,
       );
       process.exit(1);
     }
     console.warn(
-      `[copy-bridge-assets] ${vercelFns} exists but no *.func/_libs dir found — skipping (VERCEL unset, not a hosted build)`,
+      `[copy-bridge-assets] ${vercelFns} exists but no *.func module loads the bridge — skipping (VERCEL unset, not a hosted build)`,
     );
   } else {
-    for (const libs of libsDirs) copyTo(libs);
-    copies += libsDirs.length;
+    for (const d of targets) copyTo(d);
+    copies += targets.length;
 
     // Fixup: eve sets the workflow function to maxDuration 'max' but leaves the
     // server function at the 300s default — raise it so channel-side turns get
     // the same headroom (Pro GA cap).
-    for (const libs of libsDirs) {
-      const vcConfig = join(dirname(libs), ".vc-config.json");
+    for (const funcDir of funcDirs) {
+      if (findBridgeReferrerDirs(funcDir).length === 0) continue;
+      const vcConfig = join(funcDir, ".vc-config.json");
       if (!existsSync(vcConfig)) continue;
       const config = JSON.parse(readFileSync(vcConfig, "utf8"));
       if (config.maxDuration === undefined) {
@@ -108,10 +138,17 @@ if (existsSync(vercelFns)) {
 }
 
 // Nitro tree — local eve start / preview.
-const nitroLibs = join(root, ".output/server/_libs");
-if (existsSync(nitroLibs)) {
-  copyTo(nitroLibs);
-  copies += 1;
+const nitroServer = join(root, ".output/server");
+if (existsSync(nitroServer)) {
+  const targets = findBridgeReferrerDirs(nitroServer);
+  if (targets.length === 0) {
+    console.error(
+      `[copy-bridge-assets] ${nitroServer} exists but no bundled module loads the bridge — did the bundle layout change?`,
+    );
+    process.exit(1);
+  }
+  for (const d of targets) copyTo(d);
+  copies += targets.length;
 }
 
 if (copies === 0) {
