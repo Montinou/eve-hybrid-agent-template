@@ -115,4 +115,25 @@ describe("removed eve APIs", () => {
     expect(files.length).toBeGreaterThan(0);
     expect(offenders(files, markers)).toEqual([]);
   });
+
+  it("no prompt, skill, doc or source names the retired load_skill tool", () => {
+    // eve 0.90 retired `load_skill`: the model loads a skill with
+    // `eve__skill({ name })` (node_modules/eve/docs/skills.mdx). A prompt that
+    // names the old tool tells the model to call a tool that does not exist.
+    const retired = [/\bload_skill\b/];
+    const files = filesUnder([
+      "agent",
+      "evals",
+      "scripts",
+      "docs",
+      ".claude",
+      "README.md",
+      "AGENTS.md",
+    ]);
+    expect(files.some((file) => file.endsWith(".md"))).toBe(true);
+    expect(
+      files.some((file) => file.endsWith(join("agent", "instructions.md"))),
+    ).toBe(true);
+    expect(offenders(files, retired)).toEqual([]);
+  });
 });

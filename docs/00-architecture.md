@@ -17,7 +17,7 @@ chat / API ───────► standard eve channel (HTTP: terminal UI, use
                      │           agent/channels/eve.ts (customize auth before public)
                      ▼
               eve loop (Vercel Workflow durable session)
-              skills: agent/skills/*  (workflow guides, loaded via load_skill)
+              skills: agent/skills/*  (workflow guides, loaded via eve__skill)
               model: AI Gateway string, dynamic PER TURN   (agent/agent.ts)
               ├─ high-frequency turns → tiny model   (ORCHESTRATOR_MODEL)
               └─ command turns        → mid model    (COMMAND_MODEL)
