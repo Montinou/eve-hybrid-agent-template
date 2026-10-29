@@ -13,7 +13,8 @@
     "start": "eve start",
     "hash-instructions": "node scripts/hash-instructions.mjs",
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval": "eve eval --exclude-tag live"
   },
   "dependencies": {
     "@ai-sdk/harness": "^1.0.168",
