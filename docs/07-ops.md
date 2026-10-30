@@ -133,6 +133,30 @@ code comments, so after a bump also `grep -rn` the old version under `agent/`, `
 `@ai-sdk/harness-claude-code` bump also do the preview-deploy check in
 [Verification](#verification).
 
+## Template vs deployed agent
+
+The two probes below ship as scaffolding for the repo of a DEPLOYED agent, and
+they are **inert until `EVE_HEALTH_URL` is set**. Each workflow's job carries
+a job-level `if:` that tests `vars.EVE_HEALTH_URL`, so on the template itself and on a fresh
+copy of it (no agent deployed, no variable) GitHub skips the job instead of
+running it: nothing probes, nothing alerts, and the run is skipped rather than
+failed. A scheduled run that fails is what makes GitHub email the repo owner;
+a skipped job is not a failure, so the unconfigured repo stays silent.
+
+To turn them on, set the repository **variable** `EVE_HEALTH_URL` on the repo of
+the deployed agent (Settings → Secrets and variables → Actions), plus the other
+variables and secrets of each probe described below. `EVE_HEALTH_URL` is the one
+switch for both workflows: setting it enables `health-check.yml` and
+`sandbox-health.yml` together. Once it is set you have opted in, so a missing
+`AGENT_API_KEY` makes `sandbox-health.yml` fail loudly (it is not skipped).
+Set `EVE_HEALTH_URL` when you do the ops phase, after the `AGENT_API_KEY` bearer
+token exists (see "Second probe" below); then dispatch each workflow once with
+`workflow_dispatch` and confirm the first run is green. Unsetting the variable
+turns both back off. `agent/lib/workflows.test.ts` pins this: every job of a
+scheduled workflow must be gated on `EVE_HEALTH_URL`, and the `ci.yml`
+workflow, which runs on `pull_request` and `push`, must need no secret or
+variable to pass on a fresh copy.
+
 ## External health check
 
 [.github/workflows/health-check.yml](../.github/workflows/health-check.yml) is a
@@ -146,7 +170,9 @@ alive") fails silently in exactly the scenarios you built it for — a broken de
 an exhausted quota, a misconfigured route. The probe must live outside the failure
 domain. GitHub Actions cron + one curl is the cheapest thing that satisfies that.
 
-Setup: in the agent repo's GitHub settings, add the repository **variable**
+Setup (this is what turns the probe on, see
+[Template vs deployed agent](#template-vs-deployed-agent)): in the agent repo's
+GitHub settings, add the repository **variable**
 `EVE_HEALTH_URL` (e.g. `https://{{VERCEL_PROJECT}}.vercel.app/eve/v1/health`),
 variables `ALERT_EMAIL_FROM` / `ALERT_EMAIL_TO`, and the **secret**
 `RESEND_API_KEY`. Without the Resend pieces the ping still runs; only the alert
@@ -163,7 +189,8 @@ create a single sandbox while every health ping stays green, because the tools
 needing a checkout degrade honestly instead of erroring.
 
 [`.github/workflows/sandbox-health.yml`](../.github/workflows/sandbox-health.yml)
-closes that gap. Once a day it asks the agent to run `echo SANDBOX_OK` through
+closes that gap. Like the health check it is inert until `EVE_HEALTH_URL` is
+set. Once a day it asks the agent to run `echo SANDBOX_OK` through
 its built-in `bash` tool and report one machine-readable line. That opens a
 sandbox for the probe's new session, created from eve's build-time template
 snapshot — exactly the path that fails once that snapshot has expired

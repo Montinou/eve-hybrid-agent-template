@@ -133,6 +133,16 @@ You can also drive the *deployed* agent with the same dev TUI:
 npx eve dev https://{{VERCEL_PROJECT}}.vercel.app
 ```
 
+### Leave the scheduled probes inert for now
+
+The repo's two scheduled workflows (`health-check.yml`, `sandbox-health.yml`)
+skip themselves until the repository variable `EVE_HEALTH_URL` is set, so a
+fresh copy stays silent. Do **not** set it yet: one variable enables both, and
+`sandbox-health.yml` also needs `AGENT_API_KEY`, which does not exist until
+the ops phase. You enable the probes in phase 6 ([docs/07-ops.md](07-ops.md),
+"Template vs deployed agent"); until then use the `curl` above as the health
+check.
+
 ## Verification
 
 Do not proceed to phase 2 until every box checks:
@@ -142,6 +152,7 @@ Do not proceed to phase 2 until every box checks:
 - [ ] `pnpm dev` answers a chat message locally (Gateway auth working).
 - [ ] `vercel deploy --prod` succeeds; you waited for the build to finish.
 - [ ] `curl https://<deployment>/eve/v1/health` returns **200**.
+- [ ] `EVE_HEALTH_URL` is still **unset** on the repo (the scheduled probes are enabled in phase 6, not now).
 - [ ] `ANTHROPIC_AUTH_TOKEN` is set as a **Sensitive** env var on the Vercel project.
 
 Next: [docs/03-github-channel.md](03-github-channel.md) — wire the GitHub App and deterministic dispatch.

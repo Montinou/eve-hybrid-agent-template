@@ -366,8 +366,12 @@ optional extras and `docs/09-customization-checklist.md` to close out).
 **Files to edit:**
 
 - `.github/workflows/health-check.yml` and `.github/workflows/sandbox-health.yml`
-  — no edits; set their repository variables and secrets (the deployment URL is
-  `vars.EVE_HEALTH_URL`). `.github/workflows/ci.yml` ships ready and needs no
+  — no edits; they are **inert until `vars.EVE_HEALTH_URL` is set** (each job
+  is skipped, so the template and a fresh copy never run a probe or send an
+  alert). Turning them on is an explicit step of this phase: set their
+  repository variables and secrets, `secrets.AGENT_API_KEY` first (the
+  deployment URL is `vars.EVE_HEALTH_URL`, and setting it enables both
+  workflows at once). `.github/workflows/ci.yml` ships ready and needs no
   configuration.
 
 **Commands to run:**
@@ -377,12 +381,14 @@ pnpm typecheck && pnpm test
 git push                      # CI must go green: typecheck, vitest, build (no deprecation notice), instructions-hash gate
 ```
 
-Then manually dispatch the health-check workflow once, and finally open a
+Then enable the probes (set `vars.EVE_HEALTH_URL` last), manually dispatch
+`health-check.yml` and `sandbox-health.yml` once each and confirm the first
+runs are green, and finally open a
 **real probe PR** on an enabled estate repo that exercises every capability
 end-to-end. Expect the probe to find real bugs — typically a sandbox runtime
 mismatch, shell quoting, or URL derivation. Fix, redeploy, re-probe, then clean up the probe PR.
 
-**Verification gate:** CI green, health-check dispatch succeeds, and the probe
+**Verification gate:** CI green, the first dispatch of both probes succeeds, and the probe
 PR receives a complete comment with per-capability sections and honest
 statuses. **The agent is not "done" until a full probe PR passed.**
 

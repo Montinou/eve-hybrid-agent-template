@@ -88,7 +88,10 @@ Why this shape works:
   build and never recreates it at runtime, so when its snapshot lapses the
   agent silently loses repo access — health endpoint still green — until
   someone redeploys. The probe makes the agent open a sandbox and alerts when
-  it cannot.
+  it cannot. It, like `health-check.yml`, is inert until the repo variable
+  `EVE_HEALTH_URL` is set (so this template and a fresh copy never run it);
+  you turn both on in the ops phase ([docs/07-ops.md](docs/07-ops.md),
+  "Template vs deployed agent").
 - **`agent/lib/estate.ts`** — the repo registry: which repos the agent may
   touch, on which branch, with which package manager and runtime.
 - **`scripts/copy-bridge-assets.mjs`** — the mandatory post-build step that
