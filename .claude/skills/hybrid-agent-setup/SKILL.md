@@ -88,12 +88,9 @@ vercel deploy --prod          # or your team's deploy flow; builds take ~100s
 curl -sf https://{{VERCEL_PROJECT}}.vercel.app/eve/v1/health
 ```
 
-If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, the
-lockfile holds a release published under 24 h ago and pnpm 12's
-`minimumReleaseAge` (built-in default 1440 minutes) blocks it. It is a
-supply-chain control: never bypass the hold and never commit an exclude list
-or a lowered setting. Wait until the release is 24 h old, then re-run CI
-(docs/07-ops.md, "Staying current").
+pnpm 12's `minimumReleaseAge` hold is disabled in `pnpm-workspace.yaml`
+(`minimumReleaseAge: 0`) by the owner's decision, so a freshly published release
+installs immediately (docs/07-ops.md, "Staying current").
 
 **Verification gate:** `GET /eve/v1/health` on the deployed URL returns 200
 (this route is always public — it skips route auth), and

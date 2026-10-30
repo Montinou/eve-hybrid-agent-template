@@ -99,27 +99,16 @@ stops building. Four things keep it current:
   the same range in the same PR; otherwise the override keeps forcing the old
   range on every package that depends on `ai`. Dependabot edits `package.json`
   and the lockfile only.
-- **The pnpm release-age hold.** pnpm 12 refuses to install a package version
-  published less than 24 hours ago: the setting is `minimumReleaseAge`, its
-  built-in default is 1440 minutes (pnpm 12.16.1's changelog; `pnpm config get`
-  prints nothing for a built-in default), and it is checked against the
-  lockfile too. `pnpm install --frozen-lockfile` then fails with
-  `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` and names the offending versions.
-  It is a supply-chain control (a freshly published release gets a day to be
-  noticed and pulled if it is malicious or broken). Never bypass it: no
-  `minimumReleaseAgeExclude` list, no lowered `minimumReleaseAge` in
-  `pnpm-workspace.yaml`, no command-line override, and nothing committed to get
-  around it. Wait until the release is 24 hours old, then re-run CI; never merge
-  a red PR around it. The weekly Dependabot PR hits this
-  whenever it picks up a release from the last day, so
-  [.github/dependabot.yml](../.github/dependabot.yml) sets
-  `cooldown: default-days: 1` for npm (GitHub's `cooldown` option applies to
-  version updates, not security updates), which keeps its PRs from proposing
-  a version younger than a day. Known case at the time of writing: the
-  lockfile holds `eve@0.90.0` (published 2026-10-29T19:24Z) and several
-  `ai`/`@ai-sdk/*` entries (published 2026-10-29T17:08Z), so a fresh
-  `pnpm install --frozen-lockfile` fails until about 2026-10-30T19:25Z; after
-  that it passes with no change. Until then, local installs and CI wait too.
+- **The pnpm release-age hold is off.** pnpm 12 would refuse to install a version
+  published less than 24 hours ago (`minimumReleaseAge`, built-in default 1440
+  minutes). `pnpm-workspace.yaml` sets `minimumReleaseAge: 0`, by the owner's
+  decision, because the hold kept CI red for a day after every eve and AI SDK
+  release. The trade-off is explicit: a release that turns out to be malicious
+  or broken is installed before anyone has noticed, so read the lockfile diff of
+  every dependency PR before merging. To turn the hold back on, delete that line.
+  [.github/dependabot.yml](../.github/dependabot.yml) still sets
+  `cooldown: default-days: 1` for npm version updates (not security updates), so
+  the weekly PR does not propose a release younger than a day.
 
 A doc or code comment that names a version is fixed in the same PR as the bump
 that makes it stale. `agent/lib/docs-accuracy.test.ts` (part of `pnpm test`, so

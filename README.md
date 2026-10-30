@@ -152,10 +152,10 @@ All three must pass, and `pnpm build 2>&1 | grep -i deprecat` must print
 nothing: CI fails on any deprecation notice in the build output, so a
 deprecated API is fixed in the bump that introduces the warning. A weekly
 Dependabot PR proposes these bumps (see [`docs/07-ops.md`](docs/07-ops.md),
-"Staying current"). pnpm 12 will not install a version published less than 24 h
-ago (`minimumReleaseAge`): if `pnpm install --frozen-lockfile` fails with
-`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, never bypass the hold and never
-commit an exclude list: wait until that release is 24 h old, then re-run CI.
+"Staying current"). The pnpm 12 `minimumReleaseAge` hold is switched off in
+`pnpm-workspace.yaml` (`minimumReleaseAge: 0`), so fresh releases install the
+day they ship; the cost is that a compromised release is not given a day to be
+noticed, so review lockfile diffs before merging.
 
 ## Docs index
 
@@ -169,9 +169,10 @@ commit an exclude list: wait until that release is 24 h old, then re-run CI.
 | [`docs/05-dev-agent.md`](docs/05-dev-agent.md) | Phase 4 — harness anatomy, budgets, secrets, never-throw, the estate |
 | [`docs/06-sandbox-lifecycle.md`](docs/06-sandbox-lifecycle.md) | Phase 5 — the two lifecycles, teardown, retention, sweeps |
 | [`docs/07-ops.md`](docs/07-ops.md) | Phase 6 — Vercel env vars, CI, external health check, probe PR |
-| [`docs/08-extensions.md`](docs/08-extensions.md) | Optional — MCP connections, cross-session memory, email |
+| [`docs/08-extensions.md`](docs/08-extensions.md) | Optional — MCP connections (with Vercel Connect auth), cross-session memory, email, several Claude Code agents under one orchestrator |
 | [`docs/09-customization-checklist.md`](docs/09-customization-checklist.md) | The full checklist + definition of done |
 | [`docs/10-evals.md`](docs/10-evals.md) | Evals — what they cover, the stub pattern and its `allowToolStubs` prerequisite, `fast` and `live` tags, running them |
+| [`docs/EVE_Hybrid_Agent_Complete_Guide_Illustrated.pdf`](docs/EVE_Hybrid_Agent_Complete_Guide_Illustrated.pdf) | The illustrated guide to the whole pattern, as a PDF |
 
 ## Cost & billing — the honest version
 
