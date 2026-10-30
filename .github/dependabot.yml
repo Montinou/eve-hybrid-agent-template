@@ -10,9 +10,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    # pnpm 12 refuses to install a version published under 24 h ago
-    # (`minimumReleaseAge`, docs/07-ops.md "Staying current"): do not propose
-    # one that new. Version updates only; security updates are not delayed.
+    # Keep version-update PRs off releases younger than a day (the pnpm
+    # `minimumReleaseAge` hold is off, docs/07-ops.md "Staying current").
+    # Version updates only; security updates are not delayed.
     cooldown:
       default-days: 1
     groups:

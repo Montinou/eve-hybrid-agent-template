@@ -3,3 +3,6 @@ allowBuilds:
 
 overrides:
   ai: ^7.0.157
+
+# Disabled on purpose (owner decision): see docs/07-ops.md, "Staying current".
+minimumReleaseAge: 0

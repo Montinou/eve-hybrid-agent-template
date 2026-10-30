@@ -31,6 +31,8 @@ function filesUnder(dirs: string[], extension?: string): string[] {
   return dirs
     .flatMap((dir) => listFiles(join(ROOT, dir)))
     .filter((file) => file !== SELF)
+    // Binary assets (the illustrated guide PDF) are not prompts or source.
+    .filter((file) => !file.endsWith(".pdf"))
     .filter((file) => (extension ? file.endsWith(extension) : true));
 }
 

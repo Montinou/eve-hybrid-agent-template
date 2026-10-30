@@ -16,7 +16,7 @@ pnpm install
 
 pnpm is not optional here: [`pnpm-workspace.yaml`](../pnpm-workspace.yaml) pins `overrides` for the `ai` package that the harness stack depends on (pnpm 12 ignores `resolutions` in `package.json`), and the lockfile encodes a version set (`eve` + `ai` + `@ai-sdk/harness*` + `@vercel/sandbox`) that is known to work together. Don't regenerate it with another package manager.
 
-pnpm 12 also refuses to install any version published less than 24 hours ago (`minimumReleaseAge`, built-in default 1440 minutes), even from the lockfile. If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, never bypass the hold (no `minimumReleaseAgeExclude` list, no lowered `minimumReleaseAge`, nothing committed to get around it), wait until that release is 24 hours old and re-run ([docs/07-ops.md](07-ops.md), "Staying current").
+pnpm 12's 24-hour `minimumReleaseAge` hold is disabled in `pnpm-workspace.yaml` (`minimumReleaseAge: 0`); see [docs/07-ops.md](07-ops.md), "Staying current".
 
 `pnpm-workspace.yaml` holds the pnpm settings that live outside `package.json`: `allowBuilds: { esbuild: false }` (pnpm 12 fails the install on any dependency build script that is not approved, and esbuild's is not needed) and the `ai` override above.
 
