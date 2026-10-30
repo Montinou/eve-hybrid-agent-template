@@ -43,6 +43,42 @@ Design rules:
 - The connection's `description` is a prompt: write it for the model, naming
   datasets and question types, and tell the model which discovery tool to call first.
 
+### Authenticating connections with Vercel Connect
+
+When the external system is OAuth-protected (Linear, Slack, Notion, GitHub, or any
+OAuth/MCP server), you can skip the API key and let
+[Vercel Connect](https://vercel.com/docs/connect) hold the credentials. The `connect()`
+helper from `@vercel/connect/eve` handles consent, encrypted token storage and
+refresh, and plugs into eve's connection auth (docs:
+`node_modules/eve/docs/connections/overview.mdx`, "Vercel Connect").
+
+```bash
+pnpm add @vercel/connect
+vercel connect create linear --name my-agent   # prints the connector UID, e.g. linear/my-agent
+vercel connect attach linear/my-agent           # link it to this project + environments
+```
+
+```ts
+import { defineMcpClientConnection } from "eve/connections";
+import { connect } from "@vercel/connect/eve";
+
+export default defineMcpClientConnection({
+  url: "https://mcp.linear.app/mcp",
+  description: "Linear workspace: issues, projects, cycles, and comments.",
+  auth: connect("linear/my-agent"), // per-user OAuth; add principalType: "app" for a shared bot
+});
+```
+
+- Use the connector UID the CLI returns, not the `--name` you passed.
+- `connect("<uid>")` is per-user interactive OAuth; `connect({ connector, principalType: "app" })`
+  is one shared credential for the app. Pick per connection.
+- This applies to the orchestrator's connections only. The sandbox still gets
+  secrets through the session env map, never through Connect
+  ([docs/05-dev-agent.md](05-dev-agent.md) §Secrets).
+- The GitHub channel deliberately stays on a BYO App, not Connect
+  ([docs/03-github-channel.md](03-github-channel.md)); that is a per-token cost choice, not a
+  limitation. Connect is the better default for everything else that needs OAuth.
+
 ## Cross-session memory (Blob journal)
 
 eve has **no long-term memory subsystem by design** (`defineState` is
@@ -115,6 +151,25 @@ Two distinct uses, one provider:
   to decide when to load it with `eve__skill`. If skills feed the dev-agent prompt, snapshot
   them at build time and drift-gate the snapshot in CI like the instructions
   hash.
+- **More than one Claude Code agent under one orchestrator:** the orchestrator
+  does not have to front a single dev-agent. A common shape is two or more
+  specialists (for example a QA reviewer and a guard that checks changes against
+  policy) with the orchestrator choosing per event which to call. Two ways to
+  build it, both inside the hybrid pattern:
+  - **Several capability tools.** Clone `agent/tools/run_dev_task.ts` once per
+    specialist, each with its own prompt, time budget and allowed tools, and
+    give each tool a `description` that says when to use it; the orchestrator
+    routes on those descriptions (and on a skill in `agent/skills/` if the
+    rules are long). Each call still runs real Claude Code in a forked
+    sandbox on the subscription token.
+  - **Declared subagents.** Put each specialist under `agent/subagents/<id>/`
+    with a required `description` (the routing hint) and its own tools; the
+    parent delegates through a task and the child can run in parallel
+    (docs: `node_modules/eve/docs/subagents/index.mdx`). Give parallel
+    children non-overlapping write scopes.
+
+  Keep the orchestrator on the cheap model for routing; every extra specialist
+  only costs sandbox time and subscription usage when it is actually called.
 - **Subagents and multi-step schedules:** `subagents.mdx` and `schedules.mdx` —
   task-mode runs honor `outputSchema` on `defineAgent`.
 
