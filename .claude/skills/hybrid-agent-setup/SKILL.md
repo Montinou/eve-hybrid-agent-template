@@ -351,6 +351,12 @@ owner's decision (docs/07-ops.md).
 
 **Doc to read first:** `docs/07-ops.md` (then `docs/08-extensions.md` for
 optional extras and `docs/09-customization-checklist.md` to close out).
+`docs/08-extensions.md` covers authenticating orchestrator connections with
+Vercel Connect (`connect()` from `@vercel/connect/eve`) and running several
+Claude Code specialists under one orchestrator (one capability tool each, or
+declared subagents); ask the human whether either is wanted before building
+them. `docs/EVE_Hybrid_Agent_Complete_Guide_Illustrated.pdf` is a long-form
+companion to the docs; where the two disagree, the docs and the code win.
 
 **Questions for the human:**
 
