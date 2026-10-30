@@ -18,7 +18,13 @@
 # which restarts its TTL. A missing or unhealthy answer alerts; the repair is
 # a redeploy.
 #
-# Configure on THIS repo (Settings → Secrets and variables → Actions):
+# Inert until `vars.EVE_HEALTH_URL` is set: a fresh copy of this template (and
+# the template itself) never runs this probe or sends an alert. The job-level
+# `if:` below makes GitHub skip the job, and a skipped scheduled job is neither
+# a red run nor an email. Set the variables below on the repo of the DEPLOYED
+# agent to turn it on (Settings → Secrets and variables → Actions). Once
+# EVE_HEALTH_URL is set you have opted in: a missing AGENT_API_KEY then fails
+# the run loudly instead of skipping it.
 #   vars.EVE_HEALTH_URL     e.g. https://<deployment>/eve/v1/health
 #   vars.ALERT_EMAIL_FROM   verified Resend sender
 #   vars.ALERT_EMAIL_TO     recipient(s), comma-separated
@@ -40,6 +46,8 @@ permissions:
 
 jobs:
   sandbox:
+    # The opt-in switch: unconfigured repos skip this job (see the header).
+    if: ${{ vars.EVE_HEALTH_URL != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

@@ -133,8 +133,9 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
       created with `persistent: false`
 - [ ] Daily `template-maintenance` schedule deployed and observed running:
       it must report `warmed: true`
-- [ ] `.github/workflows/sandbox-health.yml` configured; you know the repair
-      for a lapsed eve template is a redeploy (docs/06-sandbox-lifecycle.md)
+- [ ] You know the repair for a lapsed eve template is a redeploy
+      (docs/06-sandbox-lifecycle.md); `.github/workflows/sandbox-health.yml`
+      is switched on in phase 6, not here
 - [ ] `SANDBOX_SNAPSHOT_EXPIRATION_MS` NOT shortened to "save storage" —
       it governs eve's build-time template snapshot too, and a short TTL
       turns a quiet week into an outage
@@ -153,18 +154,20 @@ Sensitive env var in Vercel ([docs/07-ops.md](07-ops.md)).
 - [ ] All env vars from the table above set in Vercel; secrets Sensitive
 - [ ] CI green (typecheck + vitest + a build with no deprecation notice +
       instructions-hash gate)
-- [ ] `EVE_HEALTH_URL` repo variable set; health-check workflow dispatched
-- [ ] `sandbox-health.yml` enabled with `secrets.AGENT_API_KEY` (a bearer
-      token your eve channel accepts: add an API-key verifier to
-      `agent/channels/eve.ts` first, docs/07-ops.md) — health pings alone
-      cannot see a dead sandbox
+- [ ] **Enable the scheduled probes** (inert until then, docs/07-ops.md
+      "Template vs deployed agent"): first `secrets.AGENT_API_KEY`, a bearer
+      token your eve channel accepts (add an API-key verifier to
+      `agent/channels/eve.ts`, docs/07-ops.md) — health pings alone cannot
+      see a dead sandbox; then the `EVE_HEALTH_URL` repo variable, which turns
+      on `health-check.yml` and `sandbox-health.yml` together
+- [ ] First run of **both** workflows dispatched by hand and green
 - [ ] `harness-auth-contract.test.ts` kept and its version pin current —
       it is the only guard against a dependency bump silently moving
       billing from your subscription to the AI Gateway
 - [ ] Branch validated against its protected preview with
       `EVE_BYPASS_TOKEN` before merging any dependency bump
-- [ ] Health-check workflow dispatched manually once and green; Resend alert
-      configured (or consciously skipped)
+- [ ] Resend alert configured (`RESEND_API_KEY`, `ALERT_EMAIL_FROM`,
+      `ALERT_EMAIL_TO`) or consciously skipped
 - [ ] `ANTHROPIC_AUTH_TOKEN` rotation date in a human calendar
 - [ ] **Gate:** the E2E probe PR — every capability exercised through the real
       channel; expect to fix a few real bugs here
