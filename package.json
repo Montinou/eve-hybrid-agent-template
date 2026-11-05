@@ -17,18 +17,18 @@
     "eval": "eve eval --exclude-tag live"
   },
   "dependencies": {
-    "@ai-sdk/harness": "^1.0.168",
-    "@ai-sdk/harness-claude-code": "^1.0.172",
-    "@ai-sdk/sandbox-vercel": "^1.0.168",
+    "@ai-sdk/harness": "^1.0.173",
+    "@ai-sdk/harness-claude-code": "^1.0.177",
+    "@ai-sdk/sandbox-vercel": "^1.0.173",
     "@vercel/sandbox": "^3.9.1",
-    "ai": "^7.0.157",
-    "eve": "^0.90.0",
+    "ai": "^7.0.162",
+    "eve": "^0.91.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "26.x",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": "24.x"
